@@ -15,4 +15,7 @@ router.get('/team-permissions', authenticate, authorize('manager', 'admin', 'hr'
 // Manager approves/rejects permission
 router.patch('/:id/approve', authenticate, authorize('manager', 'admin', 'hr'), ctrl.handlePermissionStatus);
 
+// Employee cancels their own permission request
+router.patch('/:id/cancel', authenticate, authorize('employee'), ctrl.cancelPermission);
+
 module.exports = router;

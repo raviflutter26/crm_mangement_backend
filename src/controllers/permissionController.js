@@ -133,3 +133,33 @@ exports.handlePermissionStatus = async (req, res, next) => {
         next(error);
     }
 };
+
+/**
+ * @desc    Employee cancels their own permission request
+ * @route   PATCH /api/permissions/:id/cancel
+ */
+exports.cancelPermission = async (req, res, next) => {
+    try {
+        const permission = await Permission.findById(req.params.id);
+        if (!permission) return res.status(404).json({ success: false, message: 'Permission not found' });
+
+        const employee = await Employee.findOne({ email: req.user.email });
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+
+        if (permission.employee.toString() !== employee._id.toString()) {
+            return res.status(403).json({ success: false, message: 'Not authorized to cancel this request' });
+        }
+
+        if (permission.status !== 'Pending') {
+            return res.status(400).json({ success: false, message: `Cannot cancel a request that is already ${permission.status}` });
+        }
+
+        permission.status = 'Rejected'; // Can use Rejected or Cancelled based on schema (schema has Pending, Approved, Rejected). Using Rejected for now as cancellation.
+        permission.reason = permission.reason + ' (Cancelled by Employee)';
+        await permission.save();
+
+        res.status(200).json({ success: true, data: permission, message: 'Permission cancelled successfully' });
+    } catch (error) {
+        next(error);
+    }
+};

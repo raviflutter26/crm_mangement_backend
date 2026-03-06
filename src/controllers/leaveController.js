@@ -1,4 +1,5 @@
 const Leave = require('../models/Leave');
+const Employee = require('../models/Employee');
 const zohoPeopleService = require('../services/zohoPeopleService');
 
 /**
@@ -10,7 +11,33 @@ exports.getLeaves = async (req, res, next) => {
         const { page = 1, limit = 20, employee, status, leaveType } = req.query;
 
         const query = {};
-        if (employee) query.employee = employee;
+        
+        // Enforce role-based access
+        if (req.user) {
+            if (req.user.role === 'employee') {
+                const emp = await Employee.findOne({ email: req.user.email });
+                if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
+                query.employee = emp._id;
+            } else if (req.user.role === 'manager') {
+                const allowedEmps = await Employee.find({ 
+                    $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
+                }).select('_id');
+                const allowedIds = allowedEmps.map(e => e._id);
+                
+                if (employee) {
+                    if (!allowedIds.some(id => id.toString() === employee.toString())) {
+                        return res.status(403).json({ success: false, message: 'Unauthorized employee query.' });
+                    }
+                    query.employee = employee;
+                } else {
+                    query.employee = { $in: allowedIds };
+                }
+            } else if (employee) {
+                // HR or admin
+                query.employee = employee;
+            }
+        }
+
         if (status) query.status = status;
         if (leaveType) query.leaveType = leaveType;
 

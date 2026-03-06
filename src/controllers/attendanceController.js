@@ -13,7 +13,34 @@ exports.getAttendance = async (req, res, next) => {
         const { page = 1, limit = 50, employee, date, startDate, endDate, status, source } = req.query;
 
         const query = {};
-        if (employee) query.employee = employee;
+        
+        // Enforce role-based access
+        if (req.user) {
+            if (req.user.role === 'employee') {
+                const emp = await Employee.findOne({ email: req.user.email });
+                if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
+                query.employee = emp._id;
+            } else if (req.user.role === 'manager') {
+                const allowedEmps = await Employee.find({ 
+                    $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
+                }).select('_id');
+                const allowedIds = allowedEmps.map(e => e._id);
+                
+                // If they explicitly asked for an employee, verify it's in their team
+                if (employee) {
+                    if (!allowedIds.some(id => id.toString() === employee.toString())) {
+                        return res.status(403).json({ success: false, message: 'Unauthorized employee query.' });
+                    }
+                    query.employee = employee;
+                } else {
+                    query.employee = { $in: allowedIds };
+                }
+            } else if (employee) {
+                // HR or Admin
+                query.employee = employee;
+            }
+        }
+        
         if (date) query.date = new Date(date);
         if (startDate && endDate) {
             query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -240,13 +267,36 @@ exports.getTodaySummary = async (req, res, next) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        
+        // If employee, do not expose stats
+        if (req.user && req.user.role === 'employee') {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    totalEmployees: 0, present: 0, absent: 0, onLeave: 0, halfDay: 0, wfh: 0, late: 0, attendancePercentage: 0,
+                },
+            });
+        }
+        
+        // Base queries
+        let userQuery = { status: 'Active' };
+        let attQuery = { date: today };
 
-        const totalEmployees = await Employee.countDocuments({ status: 'Active' });
-        const present = await Attendance.countDocuments({ date: today, status: 'Present' });
-        const halfDay = await Attendance.countDocuments({ date: today, status: 'Half Day' });
-        const wfh = await Attendance.countDocuments({ date: today, status: 'WFH' });
-        const onLeave = await Attendance.countDocuments({ date: today, status: 'On Leave' });
-        const late = await Attendance.countDocuments({ date: today, isLate: true });
+        if (req.user && req.user.role === 'manager') {
+            const allowedEmps = await Employee.find({ 
+                $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
+            }).select('_id');
+            const allowedIds = allowedEmps.map(e => e._id);
+            userQuery._id = { $in: allowedIds };
+            attQuery.employee = { $in: allowedIds };
+        }
+
+        const totalEmployees = await Employee.countDocuments(userQuery);
+        const present = await Attendance.countDocuments({ ...attQuery, status: 'Present' });
+        const halfDay = await Attendance.countDocuments({ ...attQuery, status: 'Half Day' });
+        const wfh = await Attendance.countDocuments({ ...attQuery, status: 'WFH' });
+        const onLeave = await Attendance.countDocuments({ ...attQuery, status: 'On Leave' });
+        const late = await Attendance.countDocuments({ ...attQuery, isLate: true });
         const absent = totalEmployees - present - halfDay - wfh - onLeave;
 
         res.status(200).json({
@@ -326,9 +376,25 @@ exports.getMonthlyReport = async (req, res, next) => {
 
         const startDate = new Date(y, m - 1, 1);
         const endDate = new Date(y, m, 0);
+        
+        const matchQuery = { date: { $gte: startDate, $lte: endDate } };
+        
+        if (req.user) {
+            if (req.user.role === 'employee') {
+                const emp = await Employee.findOne({ email: req.user.email });
+                if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
+                matchQuery.employee = emp._id;
+            } else if (req.user.role === 'manager') {
+                const allowedEmps = await Employee.find({ 
+                    $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
+                }).select('_id');
+                const allowedIds = allowedEmps.map(e => e._id);
+                matchQuery.employee = { $in: allowedIds };
+            }
+        }
 
         const report = await Attendance.aggregate([
-            { $match: { date: { $gte: startDate, $lte: endDate } } },
+            { $match: matchQuery },
             {
                 $group: {
                     _id: '$employee',
