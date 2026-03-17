@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; }
+        .header { background: #FF7A00; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+        .content { padding: 20px; }
+        .footer { text-align: center; font-size: 12px; color: #777; margin-top: 20px; }
+        .button { display: inline-block; padding: 10px 20px; background: #FF7A00; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>New Leave Request</h1>
+        </div>
+        <div class="content">
+            <p>Hello {{managerName}},</p>
+            <p><strong>{{employeeName}}</strong> has submitted a new leave request.</p>
+            <p><strong>Type:</strong> {{leaveType}}</p>
+            <p><strong>Duration:</strong> {{startDate}} to {{endDate}} ({{days}} days)</p>
+            <p><strong>Reason:</strong> {{reason}}</p>
+            <p>Please log in to the HRMS portal to approve or reject this request.</p>
+            <a href="{{dashboardUrl}}" class="button">Review Request</a>
+            <p>Thank you,<br>HRMS System</p>
+        </div>
+        <div class="footer">
+            &copy; {{year}} {{companyName}}. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

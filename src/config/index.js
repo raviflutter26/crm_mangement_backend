@@ -9,7 +9,7 @@ const config = {
   env: process.env.NODE_ENV || 'development',
 
   // MongoDB
-  mongodbUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/ravi_zoho',
+  mongodbUri: process.env.MONGODB_URI,
 
   // JWT
   jwt: {
@@ -43,7 +43,7 @@ const config = {
         return callback(null, true);
       }
 
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
         callback(null, true);
       } else {
         callback(new Error('CORS not allowed'));
@@ -51,6 +51,13 @@ const config = {
     },
     credentials: true,
   },
+
+  // Redis
+  redis: {
+    url: process.env.REDIS_URL,
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: process.env.REDIS_PORT || 6379,
+  }
 };
 
 module.exports = config;

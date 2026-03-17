@@ -49,6 +49,14 @@ const complianceSettingsSchema = new mongoose.Schema(
             employeeContribution: { type: Number, default: 0 },
             employerContribution: { type: Number, default: 0 },
         },
+        // Attendance Settings
+        attendanceSettings: {
+            checkInTime: { type: String, default: '09:30' },
+            checkOutTime: { type: String, default: '18:30' },
+            absentThresholdMinutes: { type: Number, default: 30 },
+            monthlyPermissionHours: { type: Number, default: 8 }, // Total hours allowed per month
+            maxPermissionCount: { type: Number, default: 4 }, // Max number of applications per month
+        },
         // Company info
         companyName: { type: String, default: '' },
         pfRegistrationNumber: { type: String, default: '' },

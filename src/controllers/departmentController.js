@@ -5,7 +5,18 @@ const Department = require('../models/Department');
 // @access  Private
 exports.getDepartments = async (req, res, next) => {
     try {
-        const departments = await Department.find();
+        let departments = await Department.find().sort({ name: 1 });
+        
+        // Auto-seed for demo if empty
+        if (departments.length === 0) {
+            const defaultDepts = [
+                'Management', 'Human Resources', 'Sales', 'Installation', 
+                'Engineering', 'Finance', 'Warehouse', 'Customer Support', 'IT'
+            ];
+            await Department.insertMany(defaultDepts.map(name => ({ name })));
+            departments = await Department.find().sort({ name: 1 });
+        }
+
         res.status(200).json({ success: true, data: departments });
     } catch (error) {
         next(error);

@@ -2,10 +2,13 @@ const mongoose = require('mongoose');
 const config = require('./index');
 
 const connectDB = async () => {
+    if (!config.mongodbUri) {
+        console.error('❌ MongoDB Connection Error: MONGODB_URI is not defined in environment variables.');
+        process.exit(1);
+    }
+
     try {
-        const conn = await mongoose.connect(config.mongodbUri, {
-            // mongoose 7+ doesn't need these, but good for compatibility
-        });
+        const conn = await mongoose.connect(config.mongodbUri);
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
         return conn;
     } catch (error) {

@@ -2,6 +2,7 @@ const Attendance = require('../models/Attendance');
 const Employee = require('../models/Employee');
 const Shift = require('../models/Shift');
 const Permission = require('../models/Permission');
+const ComplianceSettings = require('../models/ComplianceSettings');
 const zohoPeopleService = require('../services/zohoPeopleService');
 
 /**
@@ -16,13 +17,16 @@ exports.getAttendance = async (req, res, next) => {
         
         // Enforce role-based access
         if (req.user) {
-            if (req.user.role === 'employee') {
+            if (req.user.role === 'Employee') {
                 const emp = await Employee.findOne({ email: req.user.email });
                 if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
                 query.employee = emp._id;
-            } else if (req.user.role === 'manager') {
+            } else if (req.user.role === 'Manager') {
+                const mgrEmp = await Employee.findOne({ email: req.user.email });
+                if (!mgrEmp) return res.status(403).json({ success: false, message: 'Manager profile not found.' });
+                
                 const allowedEmps = await Employee.find({ 
-                    $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
+                    $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
                 }).select('_id');
                 const allowedIds = allowedEmps.map(e => e._id);
                 
@@ -41,9 +45,19 @@ exports.getAttendance = async (req, res, next) => {
             }
         }
         
-        if (date) query.date = new Date(date);
+        if (date) {
+            const start = new Date(date);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 1);
+            query.date = { $gte: start, $lt: end };
+        }
         if (startDate && endDate) {
-            query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            query.date = { $gte: start, $lte: end };
         }
         if (status) query.status = status;
         if (source) query.source = source;
@@ -80,8 +94,10 @@ exports.checkIn = async (req, res, next) => {
         const { employeeId, source, latitude, longitude, deviceId, ipAddress } = req.body;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
 
-        let record = await Attendance.findOne({ employee: employeeId, date: today });
+        let record = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
 
         if (record) {
             // Validate against multiple check-ins limits
@@ -105,11 +121,25 @@ exports.checkIn = async (req, res, next) => {
 
         // Only calculate late marks on the FIRST check-in of the day
         if (!record || record.sessions.length === 0) {
+            const employee = await Employee.findById(employeeId).populate('shift');
+            const settings = await ComplianceSettings.findOne({ isActive: true });
+            const attSettings = settings?.attendanceSettings || {
+                checkInTime: '09:00',
+                absentThresholdMinutes: 30
+            };
+
+            // Use employee's specific shift if available, else fallback to global settings
+            const rawStartTime = employee?.shift?.startTime || attSettings.checkInTime;
+            const [startHour, startMin] = rawStartTime.split(':').map(Number);
+
             const shiftStart = new Date(today);
-            shiftStart.setHours(9, 30, 0, 0);
+            shiftStart.setHours(startHour, startMin, 0, 0);
 
             const absoluteLatestCheckIn = new Date(today);
-            absoluteLatestCheckIn.setHours(10, 1, 0, 0); // 10:01 AM
+            absoluteLatestCheckIn.setHours(startHour, startMin + (attSettings.absentThresholdMinutes || 30), 0, 0); 
+            
+            // Re-read: "30 minutes after absent". 
+            // If check-in is > 30 minutes after start, status is 'Absent'.
 
             const approvedPermission = await Permission.findOne({
                 employee: employeeId,
@@ -186,8 +216,10 @@ exports.checkOut = async (req, res, next) => {
         const { employeeId, latitude, longitude } = req.body;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const record = await Attendance.findOne({ employee: employeeId, date: today });
+        const record = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
 
         if (!record || !record.sessions || record.sessions.length === 0) {
             return res.status(400).json({ success: false, message: 'Must check in first.' });
@@ -205,9 +237,17 @@ exports.checkOut = async (req, res, next) => {
         // Sum total hours across all sessions
         const sumHours = record.sessions.reduce((acc, curr) => acc + (curr.hours || 0), 0);
         
+        // Fetch settings for overtime calculation
+        const settingsForOT = await ComplianceSettings.findOne({ isActive: true });
+        const stdHours = settingsForOT ? (() => {
+            const [sH, sM] = settingsForOT.attendanceSettings.checkInTime.split(':').map(Number);
+            const [eH, eM] = settingsForOT.attendanceSettings.checkOutTime.split(':').map(Number);
+            return (eH + eM/60) - (sH + sM/60);
+        })() : 9;
+
         record.checkOut = checkOutTime; // track overall last checkout for legacy references
         record.totalHours = parseFloat(sumHours.toFixed(2));
-        record.overtime = Math.max(0, parseFloat((record.totalHours - 9).toFixed(2)));
+        record.overtime = Math.max(0, parseFloat((record.totalHours - stdHours).toFixed(2)));
         record.effectiveHours = Math.max(0, parseFloat((record.totalHours - (record.breakDuration / 60)).toFixed(2)));
         
         // Use the checkout location for the final or active session
@@ -219,8 +259,17 @@ exports.checkOut = async (req, res, next) => {
         // but if they check back in and check out AFTER 6:30 PM and finish >9 hrs, 
         // they will revert back to 'Present'.
         
+        const settings = await ComplianceSettings.findOne({ isActive: true });
+        const attSettings = settings?.attendanceSettings || {
+            checkInTime: '09:30',
+            checkOutTime: '18:30'
+        };
+
+        const [startHour, startMin] = attSettings.checkInTime.split(':').map(Number);
+        const [endHour, endMin] = attSettings.checkOutTime.split(':').map(Number);
+
         const shiftEnd = new Date(today);
-        shiftEnd.setHours(18, 30, 0, 0); // 6:30 PM
+        shiftEnd.setHours(endHour, endMin, 0, 0); // 6:30 PM default
         
         // Permission check
         const approvedPermission = await Permission.findOne({
@@ -233,7 +282,8 @@ exports.checkOut = async (req, res, next) => {
             shiftEnd.setHours(shiftEnd.getHours() - approvedPermission.hoursRequest);
         }
 
-        const requiredHours = approvedPermission ? (9 - approvedPermission.hoursRequest) : 9;
+        const standardWorkHours = (endHour + endMin/60) - (startHour + startMin/60);
+        const requiredHours = approvedPermission ? (standardWorkHours - approvedPermission.hoursRequest) : standardWorkHours;
 
         // If they checked in late (marked Absent), they generally stay Absent. Follow initial rules.
         // We only override to Present if they fixed criteria, or Absent if they fail criteria.
@@ -267,9 +317,11 @@ exports.getTodaySummary = async (req, res, next) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
         
         // If employee, do not expose stats
-        if (req.user && req.user.role === 'employee') {
+        if (req.user && req.user.role === 'Employee') {
             return res.status(200).json({
                 success: true,
                 data: {
@@ -278,26 +330,36 @@ exports.getTodaySummary = async (req, res, next) => {
             });
         }
         
-        // Base queries
+        // Base queries — use range to avoid timezone mismatch
         let userQuery = { status: 'Active' };
-        let attQuery = { date: today };
+        let attQuery = { date: { $gte: today, $lt: tomorrow } };
 
-        if (req.user && req.user.role === 'manager') {
-            const allowedEmps = await Employee.find({ 
-                $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
-            }).select('_id');
-            const allowedIds = allowedEmps.map(e => e._id);
-            userQuery._id = { $in: allowedIds };
-            attQuery.employee = { $in: allowedIds };
+        if (req.user && req.user.role === 'Manager') {
+            const mgrEmp = await Employee.findOne({ email: req.user.email });
+            if (mgrEmp) {
+                const allowedEmps = await Employee.find({ 
+                    $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
+                }).select('_id');
+                const allowedIds = allowedEmps.map(e => e._id);
+                userQuery._id = { $in: allowedIds };
+                attQuery.employee = { $in: allowedIds };
+            }
         }
 
         const totalEmployees = await Employee.countDocuments(userQuery);
-        const present = await Attendance.countDocuments({ ...attQuery, status: 'Present' });
+        // We count anyone with a record (who checked in) as 'Physically Present' for the dashboard stat
+        const present = await Attendance.countDocuments({ 
+            ...attQuery, 
+            status: { $in: ['Present', 'Half Day', 'WFH', 'Absent'] } 
+        });
         const halfDay = await Attendance.countDocuments({ ...attQuery, status: 'Half Day' });
         const wfh = await Attendance.countDocuments({ ...attQuery, status: 'WFH' });
         const onLeave = await Attendance.countDocuments({ ...attQuery, status: 'On Leave' });
         const late = await Attendance.countDocuments({ ...attQuery, isLate: true });
-        const absent = totalEmployees - present - halfDay - wfh - onLeave;
+        
+        // Absent count for summary: Total employees - those who checked in - those on leave
+        // Note: Even if someone is 'Absent' status because of being late, they are 'Present' in the dashboard count
+        const absent = totalEmployees - present - onLeave;
 
         res.status(200).json({
             success: true,
@@ -380,16 +442,19 @@ exports.getMonthlyReport = async (req, res, next) => {
         const matchQuery = { date: { $gte: startDate, $lte: endDate } };
         
         if (req.user) {
-            if (req.user.role === 'employee') {
+            if (req.user.role === 'Employee') {
                 const emp = await Employee.findOne({ email: req.user.email });
                 if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
                 matchQuery.employee = emp._id;
-            } else if (req.user.role === 'manager') {
-                const allowedEmps = await Employee.find({ 
-                    $or: [{ reportingManager: req.user.name }, { email: req.user.email }] 
-                }).select('_id');
-                const allowedIds = allowedEmps.map(e => e._id);
-                matchQuery.employee = { $in: allowedIds };
+            } else if (req.user.role === 'Manager') {
+                const mgrEmp = await Employee.findOne({ email: req.user.email });
+                if (mgrEmp) {
+                    const allowedEmps = await Employee.find({ 
+                        $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
+                    }).select('_id');
+                    const allowedIds = allowedEmps.map(e => e._id);
+                    matchQuery.employee = { $in: allowedIds };
+                }
             }
         }
 

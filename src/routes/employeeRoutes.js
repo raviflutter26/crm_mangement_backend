@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.get('/stats', employeeController.getStats);
 router.post('/sync', authorize('admin', 'hr'), employeeController.syncFromZoho);
+router.get('/managers', employeeController.getManagers);
 
 router.route('/')
     .get(employeeController.getEmployees)

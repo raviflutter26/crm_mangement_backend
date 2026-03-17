@@ -58,9 +58,9 @@ const calculatePT = (grossSalary, ptSettings = {}) => {
     if (!ptSettings.enabled) return 0;
 
     const slabs = ptSettings.slabs || [
-        { minSalary: 0, maxSalary: 7500, taxAmount: 0 },
-        { minSalary: 7501, maxSalary: 10000, taxAmount: 175 },
-        { minSalary: 10001, maxSalary: 999999999, taxAmount: 200 },
+        { minSalary: 0, maxSalary: 14999, taxAmount: 0 },
+        { minSalary: 15000, maxSalary: 25000, taxAmount: 150 },
+        { minSalary: 25001, maxSalary: 999999999, taxAmount: 200 },
     ];
 
     for (const slab of slabs) {
@@ -150,11 +150,19 @@ const calculateSalaryBreakdown = (employee, compliance, workingDays = 26, presen
     const specialAllowance = Math.round((salary.specialAllowance || 0) * ratio);
     const grossEarnings = basic + hra + da + ta + specialAllowance;
 
-    // PF
-    const pfResult = calculatePF(basic, compliance?.pf || {});
+    // PF (Merge global settings with employee-specific overrides)
+    const pfResult = calculatePF(basic, {
+        ...compliance?.pf,
+        employeeContribution: employee.pfEmployeeContributionRate ?? compliance?.pf?.employeeContribution,
+        employerContribution: employee.pfEmployerContributionRate ?? compliance?.pf?.employerContribution,
+        enabled: employee.pfEnabled ?? (compliance?.pf?.enabled || false)
+    });
 
-    // ESI
-    const esiResult = calculateESI(grossEarnings, compliance?.esi || {});
+    // ESI (Merge global settings with employee-specific overrides)
+    const esiResult = calculateESI(grossEarnings, {
+        ...compliance?.esi,
+        enabled: employee.esiEnabled ?? (compliance?.esi?.enabled || false)
+    });
 
     // PT
     const pt = calculatePT(grossEarnings, compliance?.professionalTax || {});

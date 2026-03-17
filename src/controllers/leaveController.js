@@ -1,6 +1,7 @@
 const Leave = require('../models/Leave');
 const Employee = require('../models/Employee');
 const zohoPeopleService = require('../services/zohoPeopleService');
+const { sendEmail } = require('../services/emailService');
 
 /**
  * @desc    Get all leaves
@@ -67,6 +68,27 @@ exports.getLeaves = async (req, res, next) => {
 exports.applyLeave = async (req, res, next) => {
     try {
         const leave = await Leave.create(req.body);
+
+        // Fetch employee and manager details for email
+        const employee = await Employee.findById(leave.employee).populate('reportingManager');
+        if (employee && employee.reportingManager) {
+            await sendEmail({
+                to: employee.reportingManager.email,
+                subject: `New Leave Request from ${employee.firstName} ${employee.lastName}`,
+                template: 'leaveRequestNotification',
+                data: {
+                    managerName: `${employee.reportingManager.firstName} ${employee.reportingManager.lastName}`,
+                    employeeName: `${employee.firstName} ${employee.lastName}`,
+                    leaveType: leave.leaveType,
+                    startDate: leave.startDate.toDateString(),
+                    endDate: leave.endDate.toDateString(),
+                    days: leave.totalDays,
+                    reason: leave.reason,
+                    dashboardUrl: `${process.env.WEBSITE_URL}/dashboard/leaves`
+                }
+            });
+        }
+
         res.status(201).json({ success: true, data: leave });
     } catch (error) {
         next(error);
@@ -93,6 +115,25 @@ exports.updateLeaveStatus = async (req, res, next) => {
             leave.rejectionReason = rejectionReason;
         }
         await leave.save();
+
+        // Notify employee about status update
+        const employee = await Employee.findById(leave.employee);
+        if (employee) {
+            const template = status === 'Approved' ? 'leaveApproved' : 'leaveRejected';
+            await sendEmail({
+                to: employee.email,
+                subject: `Leave Request ${status} - ${process.env.COMPANY_NAME || 'HRMS'}`,
+                template: template,
+                data: {
+                    employeeName: `${employee.firstName} ${employee.lastName}`,
+                    startDate: leave.startDate.toDateString(),
+                    endDate: leave.endDate.toDateString(),
+                    reason: leave.reason,
+                    managerNote: rejectionReason || 'Your leave request has been processed.',
+                    status: status
+                }
+            });
+        }
 
         res.status(200).json({ success: true, data: leave });
     } catch (error) {

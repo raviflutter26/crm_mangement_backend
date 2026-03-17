@@ -12,6 +12,10 @@ const employeeSchema = new mongoose.Schema(
             required: true,
             unique: true,
         },
+        profilePhoto: {
+            type: String,
+            default: null,
+        },
         firstName: {
             type: String,
             required: true,
@@ -40,8 +44,19 @@ const employeeSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
-        reportingManager: {
+        role: {
             type: String,
+            enum: ['Admin', 'HR', 'Manager', 'Employee'],
+            default: 'Employee',
+        },
+        reportingManager: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Employee',
+            default: null,
+        },
+        shift: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Shift',
             default: null,
         },
         dateOfJoining: {
@@ -63,22 +78,31 @@ const employeeSchema = new mongoose.Schema(
         },
         employmentType: {
             type: String,
-            enum: ['Full-time', 'Part-time', 'Contract', 'Intern', null],
-            default: null,
+            enum: ['Full-time', 'Contract', 'Intern', 'Part-time', 'Probation', null],
+            default: 'Full-time',
         },
         // Statutory compliance fields
         pan: { type: String, default: null },
         aadhaar: { type: String, default: null },
+        passportNumber: { type: String, default: null },
+        drivingLicense: { type: String, default: null },
         uan: { type: String, default: null }, // PF Universal Account Number
+        pfNumber: { type: String, default: null },
+        pfJoiningDate: { type: Date, default: null },
+        pfEmployeeContributionRate: { type: Number, default: 12 },
+        pfEmployerContributionRate: { type: Number, default: 12 },
         esiNumber: { type: String, default: null },
+        esiJoiningDate: { type: Date, default: null },
+        esiDispensary: { type: String, default: null },
         pfEnabled: { type: Boolean, default: true },
         esiEnabled: { type: Boolean, default: true },
         taxRegime: { type: String, enum: ['old', 'new', null], default: 'new' },
-        salaryStructure: { type: mongoose.Schema.Types.ObjectId, ref: 'SalaryStructure', default: null },
+        salaryStructure: { type: String, default: 'Standard' },
         ctc: { type: Number, default: 0 },
+        paymentCycle: { type: String, enum: ['Monthly', 'Weekly'], default: 'Monthly' },
         status: {
             type: String,
-            enum: ['Active', 'Inactive', 'Terminated', 'On Leave'],
+            enum: ['Active', 'Probation', 'Notice Period', 'Terminated', 'On Leave', 'Inactive'],
             default: 'Active',
         },
         location: {
@@ -86,7 +110,8 @@ const employeeSchema = new mongoose.Schema(
             default: null,
         },
         address: {
-            street: String,
+            currentAddress: String,
+            permanentAddress: String,
             city: String,
             state: String,
             country: String,
@@ -94,9 +119,11 @@ const employeeSchema = new mongoose.Schema(
         },
         bankDetails: {
             bankName: String,
+            accountHolderName: String,
             accountNumber: String,
             ifscCode: String,
             branchName: String,
+            upiId: String,
         },
         salary: {
             basic: { type: Number, default: 0 },

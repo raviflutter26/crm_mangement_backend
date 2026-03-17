@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; }
+        .header { background: #FF7A00; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+        .content { padding: 20px; }
+        .status { color: #2E7D32; font-weight: bold; }
+        .footer { text-align: center; font-size: 12px; color: #777; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Leave Request Status</h1>
+        </div>
+        <div class="content">
+            <p>Hello {{employeeName}},</p>
+            <p>Your leave request for <strong>{{startDate}}</strong> to <strong>{{endDate}}</strong> has been <span class="status">Approved</span>.</p>
+            <p><strong>Reason:</strong> {{reason}}</p>
+            <p>Enjoy your time off!</p>
+            <p>Best regards,<br>The HR Team</p>
+        </div>
+        <div class="footer">
+            &copy; {{year}} {{companyName}}. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

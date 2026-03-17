@@ -19,13 +19,22 @@ const complianceRoutes = require('./complianceRoutes');
 const salaryStructureRoutes = require('./salaryStructureRoutes');
 const payrollRunRoutes = require('./payrollRunRoutes');
 const permissionRoutes = require('./permissionRoutes');
+const rolePermissionRoutes = require('./rolePermissionRoutes');
+const payrollReportRoutes = require('./payrollReportRoutes');
+const payoutRoutes = require('./payoutRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/employees', employeeRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/leaves', leaveRoutes);
+
+// FIXED: specific route must come BEFORE general route to avoid conflict
+router.use('/payroll/reports', payrollReportRoutes);
 router.use('/payroll', payrollRoutes);
+router.use('/payouts', payoutRoutes);
+
 router.use('/dashboard', dashboardRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/organization', organizationRoutes);
@@ -38,6 +47,8 @@ router.use('/compliance', complianceRoutes);
 router.use('/salary-structures', salaryStructureRoutes);
 router.use('/payroll-runs', payrollRunRoutes);
 router.use('/permissions', permissionRoutes);
+router.use('/role-permissions', rolePermissionRoutes);
+router.use('/notifications', notificationRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

@@ -35,6 +35,13 @@ exports.getSettings = async (req, res, next) => {
                         { minIncome: 1000001, maxIncome: 999999999, rate: 30 },
                     ],
                 },
+                attendanceSettings: {
+                    checkInTime: '09:30',
+                    checkOutTime: '18:30',
+                    absentThresholdMinutes: 30,
+                    monthlyPermissionHours: 8,
+                    maxPermissionCount: 4,
+                },
                 financialYear: '2025-2026',
             });
         }

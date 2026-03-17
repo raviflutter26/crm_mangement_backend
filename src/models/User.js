@@ -17,14 +17,13 @@ const userSchema = new mongoose.Schema(
         },
         password: {
             type: String,
-            required: [true, 'Password is required'],
-            minlength: 6,
+            required: false,
             select: false,
         },
         role: {
             type: String,
-            enum: ['admin', 'hr', 'employee', 'manager'],
-            default: 'employee',
+            enum: ['Admin', 'HR', 'Manager', 'Employee'],
+            default: 'Employee',
         },
         zohoEmployeeId: {
             type: String,
@@ -50,10 +49,24 @@ const userSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
-        lastLogin: {
-            type: Date,
+        isFirstLogin: {
+            type: Boolean,
+            default: true,
+        },
+        isPasswordSet: {
+            type: Boolean,
+            default: false,
+        },
+        loginAttempts: {
+            type: Number,
+            default: 0,
+        },
+        lockUntil: {
+            type: Number,
             default: null,
         },
+        resetPasswordToken: String,
+        resetPasswordExpire: Date,
     },
     {
         timestamps: true,
@@ -64,13 +77,23 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre('save', async function () {
-    if (!this.isModified('password')) return;
+    if (!this.password || !this.isModified('password')) return;
     this.password = await bcrypt.hash(this.password, 12);
 });
 
 // Compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+    if (!this.password) return false;
+    
+    // Check if the stored password is a bcrypt hash
+    const isHash = this.password.startsWith('$2b$') || this.password.startsWith('$2a$');
+    
+    if (isHash) {
+        return await bcrypt.compare(candidatePassword, this.password);
+    }
+    
+    // Fallback for plain text passwords in legacy/test data
+    return candidatePassword === this.password;
 };
 
 module.exports = mongoose.model('User', userSchema);

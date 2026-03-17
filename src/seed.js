@@ -1,6 +1,6 @@
 /**
- * Seed Script — SunRise Solar Pvt. Ltd.
- * Creates 25 users (1 admin, 2 HR, 3 managers, 19 employees)
+ * Seed Script — SunRise Solar Tamil Nadu Pvt. Ltd.
+ * Creates 25 users (1 Admin, 1 HR, 3 Managers, 20 Employees)
  * + February 2026 attendance + payroll + leave balances
  */
 const mongoose = require('mongoose');
@@ -16,48 +16,54 @@ const Payroll = require('./models/Payroll');
 const PayrollRun = require('./models/PayrollRun');
 const Leave = require('./models/Leave');
 const Department = require('./models/Department');
+const Designation = require('./models/Designation');
+const Branch = require('./models/Branch');
+const Location = require('./models/Location');
+const Shift = require('./models/Shift');
+const Holiday = require('./models/Holiday');
 const ComplianceSettings = require('./models/ComplianceSettings');
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ravi_zoho';
 
-// ========== 25 EMPLOYEES — SunRise Solar Pvt. Ltd. ==========
+// ========== 25 EMPLOYEES — SunRise Solar Tamil Nadu Pvt. Ltd. ==========
 const employees = [
     // 1 Admin / MD
-    { firstName: 'Rajesh', lastName: 'Sharma', email: 'rajesh.sharma@sunrisesolar.in', phone: '9876543210', role: 'admin', department: 'Management', designation: 'Managing Director', doj: '2018-04-01', ctc: 2400000, salary: { basic: 100000, hra: 40000, da: 10000, ta: 5000, special: 45000 } },
+    { firstName: 'Senthil', lastName: 'Kumar', email: 'senthil.kumar@sunrisesolar.tn', phone: '9876543210', role: 'Admin', department: 'Management', designation: 'Managing Director', doj: '2018-04-01', ctc: 2400000, salary: { basic: 100000, hra: 40000, da: 10000, ta: 5000, special: 45000 } },
 
-    // 2 HR
-    { firstName: 'Priya', lastName: 'Nair', email: 'priya.nair@sunrisesolar.in', phone: '9876543211', role: 'hr', department: 'Human Resources', designation: 'HR Manager', doj: '2019-06-15', ctc: 960000, salary: { basic: 40000, hra: 16000, da: 4000, ta: 3000, special: 17000 } },
-    { firstName: 'Sneha', lastName: 'Kulkarni', email: 'sneha.kulkarni@sunrisesolar.in', phone: '9876543212', role: 'hr', department: 'Human Resources', designation: 'HR Executive', doj: '2021-01-10', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
+    // 1 HR
+    { firstName: 'Meenakshi', lastName: 'Sundaram', email: 'meenakshi.s@sunrisesolar.tn', phone: '9876543211', role: 'HR', department: 'Human Resources', designation: 'HR Manager', doj: '2019-06-15', ctc: 960000, salary: { basic: 40000, hra: 16000, da: 4000, ta: 3000, special: 17000 } },
 
     // 3 Managers
-    { firstName: 'Amit', lastName: 'Patel', email: 'amit.patel@sunrisesolar.in', phone: '9876543213', role: 'manager', department: 'Sales', designation: 'Sales Manager', doj: '2019-03-01', ctc: 1200000, salary: { basic: 50000, hra: 20000, da: 5000, ta: 3000, special: 22000 } },
-    { firstName: 'Vikram', lastName: 'Singh', email: 'vikram.singh@sunrisesolar.in', phone: '9876543214', role: 'manager', department: 'Installation', designation: 'Installation Head', doj: '2019-08-01', ctc: 1080000, salary: { basic: 45000, hra: 18000, da: 4500, ta: 3000, special: 19500 } },
-    { firstName: 'Deepa', lastName: 'Menon', email: 'deepa.menon@sunrisesolar.in', phone: '9876543215', role: 'manager', department: 'Finance', designation: 'Finance Manager', doj: '2020-02-01', ctc: 1020000, salary: { basic: 42500, hra: 17000, da: 4250, ta: 3000, special: 18250 } },
+    { firstName: 'Arun', lastName: 'Pandian', email: 'arun.p@sunrisesolar.tn', phone: '9876543213', role: 'Manager', department: 'Sales', designation: 'Sales Manager', doj: '2019-03-01', ctc: 1200000, salary: { basic: 50000, hra: 20000, da: 5000, ta: 3000, special: 22000 } },
+    { firstName: 'Bala', lastName: 'Murugan', email: 'bala.m@sunrisesolar.tn', phone: '9876543214', role: 'Manager', department: 'Installation', designation: 'Installation Head', doj: '2019-08-01', ctc: 1080000, salary: { basic: 45000, hra: 18000, da: 4500, ta: 3000, special: 19500 } },
+    { firstName: 'Lakshmi', lastName: 'Narayanan', email: 'lakshmi.n@sunrisesolar.tn', phone: '9876543215', role: 'Manager', department: 'Finance', designation: 'Finance Manager', doj: '2020-02-01', ctc: 1020000, salary: { basic: 42500, hra: 17000, da: 4250, ta: 3000, special: 18250 } },
 
-    // 19 Employees
-    { firstName: 'Rahul', lastName: 'Verma', email: 'rahul.verma@sunrisesolar.in', phone: '9876543216', role: 'employee', department: 'Sales', designation: 'Senior Sales Executive', doj: '2020-07-01', ctc: 720000, salary: { basic: 30000, hra: 12000, da: 3000, ta: 2500, special: 12500 } },
-    { firstName: 'Ananya', lastName: 'Reddy', email: 'ananya.reddy@sunrisesolar.in', phone: '9876543217', role: 'employee', department: 'Sales', designation: 'Sales Executive', doj: '2021-03-15', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
-    { firstName: 'Karan', lastName: 'Mehta', email: 'karan.mehta@sunrisesolar.in', phone: '9876543218', role: 'employee', department: 'Sales', designation: 'Sales Executive', doj: '2022-01-10', ctc: 480000, salary: { basic: 20000, hra: 8000, da: 2000, ta: 2000, special: 8000 } },
-    { firstName: 'Pooja', lastName: 'Gupta', email: 'pooja.gupta@sunrisesolar.in', phone: '9876543219', role: 'employee', department: 'Sales', designation: 'Business Development Associate', doj: '2023-06-01', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 1500, special: 7250 } },
+    // 20 Employees
+    { firstName: 'Karthik', lastName: 'Raja', email: 'karthik.r@sunrisesolar.tn', phone: '9876543216', role: 'Employee', department: 'Sales', designation: 'Senior Sales Executive', doj: '2020-07-01', ctc: 720000, salary: { basic: 30000, hra: 12000, da: 3000, ta: 2500, special: 12500 } },
+    { firstName: 'Aarthi', lastName: 'Ganesh', email: 'aarthi.g@sunrisesolar.tn', phone: '9876543217', role: 'Employee', department: 'Sales', designation: 'Sales Executive', doj: '2021-03-15', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
+    { firstName: 'Vijayakumar', lastName: 'R', email: 'vijay.r@sunrisesolar.tn', phone: '9876543218', role: 'Employee', department: 'Sales', designation: 'Sales Executive', doj: '2022-01-10', ctc: 480000, salary: { basic: 20000, hra: 8000, da: 2000, ta: 2000, special: 8000 } },
+    { firstName: 'Gayathri', lastName: 'Devi', email: 'gayathri.d@sunrisesolar.tn', phone: '9876543219', role: 'Employee', department: 'Sales', designation: 'Business Development Associate', doj: '2023-06-01', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 1500, special: 7250 } },
 
-    { firstName: 'Suresh', lastName: 'Kumar', email: 'suresh.kumar@sunrisesolar.in', phone: '9876543220', role: 'employee', department: 'Installation', designation: 'Senior Technician', doj: '2019-11-01', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2500, special: 10000 } },
-    { firstName: 'Manoj', lastName: 'Tiwari', email: 'manoj.tiwari@sunrisesolar.in', phone: '9876543221', role: 'employee', department: 'Installation', designation: 'Technician', doj: '2020-09-01', ctc: 480000, salary: { basic: 20000, hra: 8000, da: 2000, ta: 2000, special: 8000 } },
-    { firstName: 'Ravi', lastName: 'Prasad', email: 'ravi.prasad@sunrisesolar.in', phone: '9876543222', role: 'employee', department: 'Installation', designation: 'Technician', doj: '2021-05-15', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 2000, special: 6750 } },
-    { firstName: 'Dinesh', lastName: 'Yadav', email: 'dinesh.yadav@sunrisesolar.in', phone: '9876543223', role: 'employee', department: 'Installation', designation: 'Junior Technician', doj: '2023-02-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
-    { firstName: 'Ajay', lastName: 'Chauhan', email: 'ajay.chauhan@sunrisesolar.in', phone: '9876543224', role: 'employee', department: 'Installation', designation: 'Helper', doj: '2024-01-15', ctc: 300000, salary: { basic: 12500, hra: 5000, da: 1250, ta: 1250, special: 5000 } },
+    { firstName: 'Manikandan', lastName: 'P', email: 'mani.p@sunrisesolar.tn', phone: '9876543220', role: 'Employee', department: 'Installation', designation: 'Senior Technician', doj: '2019-11-01', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2500, special: 10000 } },
+    { firstName: 'Saravanan', lastName: 'M', email: 'saravanan.m@sunrisesolar.tn', phone: '9876543221', role: 'Employee', department: 'Installation', designation: 'Technician', doj: '2020-09-01', ctc: 480000, salary: { basic: 20000, hra: 8000, da: 2000, ta: 2000, special: 8000 } },
+    { firstName: 'Rajeshwari', lastName: 'S', email: 'rajeshwari.s@sunrisesolar.tn', phone: '9876543222', role: 'Employee', department: 'Installation', designation: 'Technician', doj: '2021-05-15', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 2000, special: 6750 } },
+    { firstName: 'Vignesh', lastName: 'Waran', email: 'vignesh.w@sunrisesolar.tn', phone: '9876543223', role: 'Employee', department: 'Installation', designation: 'Junior Technician', doj: '2023-02-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
+    { firstName: 'Dhanush', lastName: 'K', email: 'dhanush.k@sunrisesolar.tn', phone: '9876543224', role: 'Employee', department: 'Installation', designation: 'Helper', doj: '2024-01-15', ctc: 300000, salary: { basic: 12500, hra: 5000, da: 1250, ta: 1250, special: 5000 } },
 
-    { firstName: 'Neha', lastName: 'Joshi', email: 'neha.joshi@sunrisesolar.in', phone: '9876543225', role: 'employee', department: 'Engineering', designation: 'Solar Engineer', doj: '2020-04-01', ctc: 840000, salary: { basic: 35000, hra: 14000, da: 3500, ta: 3000, special: 14500 } },
-    { firstName: 'Arjun', lastName: 'Deshmukh', email: 'arjun.deshmukh@sunrisesolar.in', phone: '9876543226', role: 'employee', department: 'Engineering', designation: 'Design Engineer', doj: '2021-08-01', ctc: 660000, salary: { basic: 27500, hra: 11000, da: 2750, ta: 2500, special: 11250 } },
-    { firstName: 'Meera', lastName: 'Iyer', email: 'meera.iyer@sunrisesolar.in', phone: '9876543227', role: 'employee', department: 'Engineering', designation: 'Quality Engineer', doj: '2022-04-15', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2500, special: 10000 } },
+    { firstName: 'Pavithra', lastName: 'R', email: 'pavithra.r@sunrisesolar.tn', phone: '9876543225', role: 'Employee', department: 'Engineering', designation: 'Solar Engineer', doj: '2020-04-01', ctc: 840000, salary: { basic: 35000, hra: 14000, da: 3500, ta: 3000, special: 14500 } },
+    { firstName: 'Sridhar', lastName: 'V', email: 'sridhar.v@sunrisesolar.tn', phone: '9876543226', role: 'Employee', department: 'Engineering', designation: 'Design Engineer', doj: '2021-08-01', ctc: 660000, salary: { basic: 27500, hra: 11000, da: 2750, ta: 2500, special: 11250 } },
+    { firstName: 'Sindhu', lastName: 'B', email: 'sindhu.b@sunrisesolar.tn', phone: '9876543227', role: 'Employee', department: 'Engineering', designation: 'Quality Engineer', doj: '2022-04-15', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2500, special: 10000 } },
 
-    { firstName: 'Sanjay', lastName: 'Mishra', email: 'sanjay.mishra@sunrisesolar.in', phone: '9876543228', role: 'employee', department: 'Finance', designation: 'Senior Accountant', doj: '2020-01-15', ctc: 660000, salary: { basic: 27500, hra: 11000, da: 2750, ta: 2500, special: 11250 } },
-    { firstName: 'Kavita', lastName: 'Rao', email: 'kavita.rao@sunrisesolar.in', phone: '9876543229', role: 'employee', department: 'Finance', designation: 'Accounts Executive', doj: '2022-07-01', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 1500, special: 7250 } },
+    { firstName: 'Narayanan', lastName: 'A', email: 'narayanan.a@sunrisesolar.tn', phone: '9876543228', role: 'Employee', department: 'Finance', designation: 'Senior Accountant', doj: '2020-01-15', ctc: 660000, salary: { basic: 27500, hra: 11000, da: 2750, ta: 2500, special: 11250 } },
+    { firstName: 'Deepika', lastName: 'P', email: 'deepika.p@sunrisesolar.tn', phone: '9876543229', role: 'Employee', department: 'Finance', designation: 'Accounts Executive', doj: '2022-07-01', ctc: 420000, salary: { basic: 17500, hra: 7000, da: 1750, ta: 1500, special: 7250 } },
 
-    { firstName: 'Rohit', lastName: 'Saxena', email: 'rohit.saxena@sunrisesolar.in', phone: '9876543230', role: 'employee', department: 'Warehouse', designation: 'Store Manager', doj: '2020-11-01', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
-    { firstName: 'Vijay', lastName: 'Pandey', email: 'vijay.pandey@sunrisesolar.in', phone: '9876543231', role: 'employee', department: 'Warehouse', designation: 'Store Keeper', doj: '2022-03-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
+    { firstName: 'Prakash', lastName: 'Raj', email: 'prakash.r@sunrisesolar.tn', phone: '9876543230', role: 'Employee', department: 'Warehouse', designation: 'Store Manager', doj: '2020-11-01', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
+    { firstName: 'Tamil', lastName: 'Selvan', email: 'tamil.s@sunrisesolar.tn', phone: '9876543231', role: 'Employee', department: 'Warehouse', designation: 'Store Keeper', doj: '2022-03-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
 
-    { firstName: 'Aishwarya', lastName: 'Bhatt', email: 'aishwarya.bhatt@sunrisesolar.in', phone: '9876543232', role: 'employee', department: 'Customer Support', designation: 'Support Lead', doj: '2021-02-01', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2000, special: 10500 } },
-    { firstName: 'Nikhil', lastName: 'Agarwal', email: 'nikhil.agarwal@sunrisesolar.in', phone: '9876543233', role: 'employee', department: 'Customer Support', designation: 'Support Executive', doj: '2023-09-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
+    { firstName: 'Ishwarya', lastName: 'R', email: 'ishwarya.r@sunrisesolar.tn', phone: '9876543232', role: 'Employee', department: 'Customer Support', designation: 'Support Lead', doj: '2021-02-01', ctc: 600000, salary: { basic: 25000, hra: 10000, da: 2500, ta: 2000, special: 10500 } },
+    { firstName: 'Logesh', lastName: 'Waran', email: 'logesh.w@sunrisesolar.tn', phone: '9876543233', role: 'Employee', department: 'Customer Support', designation: 'Support Executive', doj: '2023-09-01', ctc: 360000, salary: { basic: 15000, hra: 6000, da: 1500, ta: 1500, special: 6000 } },
+    { firstName: 'Anitha', lastName: 'Kumar', email: 'anitha.k@sunrisesolar.tn', phone: '9876543234', role: 'Employee', department: 'Sales', designation: 'Sales Executive', doj: '2023-10-15', ctc: 450000, salary: { basic: 18500, hra: 7400, da: 1850, ta: 2000, special: 7750 } },
+    { firstName: 'Kavitha', lastName: 'Selvam', email: 'kavitha.s@sunrisesolar.tn', phone: '9876543235', role: 'Employee', department: 'Human Resources', designation: 'HR Executive', doj: '2021-01-10', ctc: 540000, salary: { basic: 22500, hra: 9000, da: 2250, ta: 2000, special: 9250 } },
 ];
 
 // ========== FEBRUARY 2026 CONFIG ==========
@@ -171,6 +177,12 @@ async function seed() {
             PayrollRun.deleteMany({}),
             Leave.deleteMany({}),
             ComplianceSettings.deleteMany({}),
+            Department.deleteMany({}),
+            Designation.deleteMany({}),
+            Branch.deleteMany({}),
+            Location.deleteMany({}),
+            Shift.deleteMany({}),
+            Holiday.deleteMany({}),
         ]);
         console.log('✅ Cleared!\n');
 
@@ -206,10 +218,10 @@ async function seed() {
                 ],
             },
             financialYear: '2025-2026',
-            companyName: 'SunRise Solar Pvt. Ltd.',
-            pfRegistrationNumber: 'MH/MUM/12345',
-            esiRegistrationNumber: 'MH/42/1234567',
-            tanNumber: 'MUMS12345E',
+            companyName: 'SunRise Solar Tamil Nadu Pvt. Ltd.',
+            pfRegistrationNumber: 'TN/MAS/12345',
+            esiRegistrationNumber: 'TN/42/1234567',
+            tanNumber: 'CHNS12345E',
             isActive: true,
         });
 
@@ -217,8 +229,57 @@ async function seed() {
         console.log('🏢 Creating departments...');
         const depts = ['Management', 'Human Resources', 'Sales', 'Installation', 'Engineering', 'Finance', 'Warehouse', 'Customer Support'];
         for (const d of depts) {
-            await Department.findOneAndUpdate({ name: d }, { name: d, status: 'Active' }, { upsert: true, new: true });
+            await Department.create({ name: d, status: 'Active' });
         }
+
+        // Create Designations
+        console.log('🏅 Creating roles/designations...');
+        const designationsList = [
+            { name: 'Managing Director', level: 10, department: 'Management' },
+            { name: 'HR Manager', level: 7, department: 'Human Resources' },
+            { name: 'HR Executive', level: 3, department: 'Human Resources' },
+            { name: 'Sales Manager', level: 7, department: 'Sales' },
+            { name: 'Installation Head', level: 7, department: 'Installation' },
+            { name: 'Finance Manager', level: 7, department: 'Finance' },
+            { name: 'Senior Sales Executive', level: 5, department: 'Sales' },
+            { name: 'Sales Executive', level: 3, department: 'Sales' },
+            { name: 'Senior Technician', level: 5, department: 'Installation' },
+            { name: 'Technician', level: 3, department: 'Installation' },
+            { name: 'Solar Engineer', level: 5, department: 'Engineering' },
+            { name: 'Design Engineer', level: 5, department: 'Engineering' },
+            { name: 'Quality Engineer', level: 4, department: 'Engineering' },
+            { name: 'Support Lead', level: 6, department: 'Customer Support' },
+            { name: 'Support Executive', level: 3, department: 'Customer Support' },
+        ];
+        await Designation.insertMany(designationsList);
+
+        // Create Branches
+        console.log('📍 Creating branches...');
+        const branchesList = [
+            { name: 'Chennai HQ', code: 'CHN-HQ', city: 'Chennai', state: 'Tamil Nadu', country: 'India', email: 'chennai@sunrisesolar.tn' },
+            { name: 'Coimbatore Ops', code: 'CBE-01', city: 'Coimbatore', state: 'Tamil Nadu', country: 'India', email: 'cbe@sunrisesolar.tn' },
+        ];
+        const branches = await Branch.insertMany(branchesList);
+
+        // Create Locations
+        console.log('🏢 Creating locations...');
+        await Location.create({ name: 'Guindy Tech Park', branch: 'Chennai HQ', floor: '5th', capacity: 150 });
+        await Location.create({ name: 'Peelamedu Office', branch: 'Coimbatore Ops', floor: '2nd', capacity: 80 });
+
+        // Create Shifts
+        console.log('🕙 Creating shifts...');
+        await Shift.create({ name: 'General Shift', startTime: '09:00', endTime: '18:00', breakMinutes: 60, graceMinutes: 15 });
+        await Shift.create({ name: 'Morning Shift', startTime: '06:00', endTime: '15:00', breakMinutes: 45, graceMinutes: 10 });
+
+        // Create Holidays
+        console.log('🗓️ Creating holidays...');
+        const holidaysList = [
+            { name: 'New Year Day', date: new Date('2026-01-01'), type: 'national', year: 2026 },
+            { name: 'Republic Day', date: new Date('2026-01-26'), type: 'national', year: 2026 },
+            { name: 'Independence Day', date: new Date('2026-08-15'), type: 'national', year: 2026 },
+            { name: 'Diwali', date: new Date('2026-11-09'), type: 'national', year: 2026 },
+        ];
+        await Holiday.insertMany(holidaysList);
 
         // Create users + employees
         console.log('👥 Creating 25 users & employees...\n');
@@ -239,6 +300,7 @@ async function seed() {
                 department: emp.department,
                 designation: emp.designation,
                 isActive: true,
+                isFirstLogin: false
             });
             createdUsers.push(user);
 
@@ -260,6 +322,7 @@ async function seed() {
                     ta: emp.salary.ta,
                     specialAllowance: emp.salary.special,
                 },
+                role: emp.role || 'Employee',
                 status: 'Active',
                 employmentType: 'Full-time',
                 pan: `ABCDE${String(1000 + i).padStart(4, '0')}F`,
@@ -273,6 +336,36 @@ async function seed() {
 
             console.log(`  ✅ ${empId} | ${emp.firstName} ${emp.lastName} | ${emp.role.toUpperCase()} | ${emp.department} | ₹${(emp.salary.basic + emp.salary.hra + emp.salary.da + emp.salary.ta + emp.salary.special).toLocaleString()}/mo`);
         }
+
+        // Assign Managers
+        console.log('\n🔗 Assigning reporting managers...');
+        const adminId = createdEmployees[0]._id; // Ravi Kumar
+        const hrId = createdEmployees[1]._id; // Ananya Sharma
+        const salesManagerId = createdEmployees[3]._id; // Deepak Singh
+        const installManagerId = createdEmployees[4]._id; // Priya Patel
+        const financeManagerId = createdEmployees[5]._id; // Aditya Joshi
+
+        // Managers report to Admin
+        await Employee.findByIdAndUpdate(createdEmployees[1]._id, { reportingManager: adminId }); // HR
+        await Employee.findByIdAndUpdate(createdEmployees[2]._id, { reportingManager: hrId }); // HR Exec to HR Mgr
+        await Employee.findByIdAndUpdate(createdEmployees[3]._id, { reportingManager: adminId }); // Sales Mgr
+        await Employee.findByIdAndUpdate(createdEmployees[4]._id, { reportingManager: adminId }); // Install Mgr
+        await Employee.findByIdAndUpdate(createdEmployees[5]._id, { reportingManager: adminId }); // Finance Mgr
+
+        // Employees report to respective Managers
+        for (let i = 6; i < createdEmployees.length; i++) {
+            const emp = createdEmployees[i];
+            let managerId = adminId;
+            if (emp.department === 'Sales') managerId = salesManagerId;
+            else if (emp.department === 'Installation') managerId = installManagerId;
+            else if (emp.department === 'Finance') managerId = financeManagerId;
+            else if (emp.department === 'Engineering') managerId = adminId;
+            else if (emp.department === 'Warehouse') managerId = installManagerId;
+            else if (emp.department === 'Customer Support') managerId = hrId;
+
+            await Employee.findByIdAndUpdate(emp._id, { reportingManager: managerId });
+        }
+        console.log('  ✅ Managers assigned!\n');
 
         // ========== FEBRUARY 2026 ATTENDANCE ==========
         console.log('\n📅 Generating February 2026 attendance...');
@@ -493,7 +586,7 @@ async function seed() {
 
         // ========== SUMMARY ==========
         console.log('═══════════════════════════════════════════════');
-        console.log('  🌞 SunRise Solar Pvt. Ltd. — Seed Complete');
+        console.log('  🌞 SunRise Solar Tamil Nadu — Seed Complete');
         console.log('═══════════════════════════════════════════════');
         console.log(`  👤 Users:           25`);
         console.log(`  👥 Employees:       25`);
@@ -501,14 +594,14 @@ async function seed() {
         console.log(`  💰 Payroll Records: 25 (Feb 2026 — Paid)`);
         console.log(`  📋 Leave Records:   Created with balances`);
         console.log(`  ⚙️  Compliance:     PF/ESI/PT/TDS configured`);
-        console.log(`  🏢 Departments:     ${depts.length}`);
+        console.log(`  🏢 Departments:     8`);
         console.log('');
         console.log('  🔑 Login Credentials:');
         console.log('  ──────────────────────────────────────────');
-        console.log('  ADMIN:    rajesh.sharma@sunrisesolar.in');
-        console.log('  HR:       priya.nair@sunrisesolar.in');
-        console.log('  MANAGER:  amit.patel@sunrisesolar.in');
-        console.log('  EMPLOYEE: rahul.verma@sunrisesolar.in');
+        console.log('  ADMIN:    senthil.kumar@sunrisesolar.tn');
+        console.log('  HR:       meenakshi.s@sunrisesolar.tn');
+        console.log('  MANAGER:  arun.p@sunrisesolar.tn');
+        console.log('  EMPLOYEE: karthik.r@sunrisesolar.tn');
         console.log('  Password: Solar@123 (for all users)');
         console.log('═══════════════════════════════════════════════\n');
 
