@@ -1,7 +1,16 @@
 const dotenv = require('dotenv');
+const fs = require('fs');
 const path = require('path');
 
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+const envPath = path.join(__dirname, '../../.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
+
+// Helper to get environment variables with fallback and case-insensitivity
+const getEnv = (key, defaultValue) => {
+  return process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || defaultValue;
+};
 
 const config = {
   // Server
@@ -9,7 +18,7 @@ const config = {
   env: process.env.NODE_ENV || 'development',
 
   // MongoDB
-  mongodbUri: process.env.MONGODB_URI,
+  mongodbUri: getEnv('MONGODB_URI') || getEnv('MONGO_URL') || getEnv('DATABASE_URL'),
 
   // JWT
   jwt: {

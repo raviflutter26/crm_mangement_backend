@@ -15,6 +15,11 @@ const app = express();
 // Trust proxy to resolve 'X-Forwarded-For' error with express-rate-limit behind proxies/tunnels
 app.set('trust proxy', 1);
 
+// Debug: Log environment variable names (not values) to verify Render config
+console.log('🔍 Detected Environment Variables:', 
+    Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('PASS') && !k.includes('KEY')).join(', ')
+);
+
 // ============== MIDDLEWARE ==============
 
 // Security headers
