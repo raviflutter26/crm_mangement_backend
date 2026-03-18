@@ -35,6 +35,11 @@ const errorHandler = (err, req, res, next) => {
         return res.status(401).json({ success: false, message: 'Token expired.' });
     }
 
+    // CORS errors
+    if (err.message === 'CORS not allowed') {
+        return res.status(403).json({ success: false, message: 'Cross-origin request blocked.' });
+    }
+
     res.status(err.statusCode || 500).json({
         success: false,
         message: error.message || 'Internal Server Error',
