@@ -96,6 +96,7 @@ const employeeSchema = new mongoose.Schema(
         esiDispensary: { type: String, default: null },
         pfEnabled: { type: Boolean, default: true },
         esiEnabled: { type: Boolean, default: true },
+        esiSalaryLimit: { type: Number, default: 21000 },
         taxRegime: { type: String, enum: ['old', 'new', null], default: 'new' },
         salaryStructure: { type: String, default: 'Standard' },
         ctc: { type: Number, default: 0 },
@@ -118,18 +119,19 @@ const employeeSchema = new mongoose.Schema(
             zipCode: String,
         },
         bankDetails: {
-            bankName: String,
-            accountHolderName: String,
-            accountNumber: String,
-            ifscCode: String,
-            branchName: String,
-            upiId: String,
+            accountHolderName: { type: String, trim: true },
+            encryptedAccountNumber: { type: String }, // AES-256-GCM encrypted
+            ifscCode: { type: String, uppercase: true, trim: true },
+            bankName: { type: String },
+            branchName: { type: String },
+            upiId: { type: String, trim: true },
+            verificationStatus: { type: String, enum: ['Pending', 'Verified', 'Rejected'], default: 'Pending' },
+            cancelledCheque: { type: String }, // File path or URL
         },
         salary: {
             basic: { type: Number, default: 0 },
             hra: { type: Number, default: 0 },
             da: { type: Number, default: 0 },
-            ta: { type: Number, default: 0 },
             specialAllowance: { type: Number, default: 0 },
             grossSalary: { type: Number, default: 0 },
             netSalary: { type: Number, default: 0 },
@@ -173,4 +175,28 @@ employeeSchema.virtual('fullName').get(function () {
 employeeSchema.index({ department: 1 });
 employeeSchema.index({ status: 1 });
 
-module.exports = mongoose.model('Employee', employeeSchema);
+const { encrypt, decrypt } = require('../utils/encryption');
+
+const Employee = mongoose.model('Employee', employeeSchema);
+
+// Virtual for getting/setting decrypted account number
+employeeSchema.virtual('bankDetails.accountNumber')
+    .get(function() {
+        if (!this.bankDetails?.encryptedAccountNumber) return '';
+        try {
+            return decrypt(this.bankDetails.encryptedAccountNumber);
+        } catch (err) {
+            return '********'; // Return masked if decryption fails
+        }
+    })
+    .set(function(value) {
+        if (value) {
+            this.bankDetails.encryptedAccountNumber = encrypt(value);
+        }
+    });
+
+// Ensure virtuals are included in toJSON and toObject
+employeeSchema.set('toJSON', { virtuals: true });
+employeeSchema.set('toObject', { virtuals: true });
+
+module.exports = Employee;

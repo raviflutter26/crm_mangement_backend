@@ -71,6 +71,7 @@ exports.applyLeave = async (req, res, next) => {
 
         // Fetch employee and manager details for email
         const employee = await Employee.findById(leave.employee).populate('reportingManager');
+        
         if (employee && employee.reportingManager) {
             await sendEmail({
                 to: employee.reportingManager.email,
@@ -87,6 +88,26 @@ exports.applyLeave = async (req, res, next) => {
                     dashboardUrl: `${process.env.WEBSITE_URL}/dashboard/leaves`
                 }
             });
+        } else if (employee) {
+            // Fallback: Notify HR/Admin if no manager assigned
+            const admins = await Employee.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
+            for (const admin of admins) {
+                await sendEmail({
+                    to: admin.email,
+                    subject: `[Approval Required] New Leave Request - ${employee.firstName} ${employee.lastName}`,
+                    template: 'leaveRequestNotification',
+                    data: {
+                        managerName: `${admin.firstName} ${admin.lastName} (HR/Admin)`,
+                        employeeName: `${employee.firstName} ${employee.lastName}`,
+                        leaveType: leave.leaveType,
+                        startDate: leave.startDate.toDateString(),
+                        endDate: leave.endDate.toDateString(),
+                        days: leave.totalDays,
+                        reason: leave.reason,
+                        dashboardUrl: `${process.env.WEBSITE_URL}/dashboard/leaves`
+                    }
+                });
+            }
         }
 
         res.status(201).json({ success: true, data: leave });

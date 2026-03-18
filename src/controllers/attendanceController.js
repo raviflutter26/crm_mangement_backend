@@ -3,7 +3,10 @@ const Employee = require('../models/Employee');
 const Shift = require('../models/Shift');
 const Permission = require('../models/Permission');
 const ComplianceSettings = require('../models/ComplianceSettings');
+const configService = require('../services/configService');
 const zohoPeopleService = require('../services/zohoPeopleService');
+const { sendEmail } = require('../services/emailService');
+const mongoose = require('mongoose');
 
 /**
  * @desc    Get attendance records
@@ -122,25 +125,19 @@ exports.checkIn = async (req, res, next) => {
         // Only calculate late marks on the FIRST check-in of the day
         if (!record || record.sessions.length === 0) {
             const employee = await Employee.findById(employeeId).populate('shift');
-            const settings = await ComplianceSettings.findOne({ isActive: true });
-            const attSettings = settings?.attendanceSettings || {
-                checkInTime: '09:00',
-                absentThresholdMinutes: 30
-            };
-
-            // Use employee's specific shift if available, else fallback to global settings
-            const rawStartTime = employee?.shift?.startTime || attSettings.checkInTime;
+            const config = await configService.getAttendanceConfig();
+            
+            // Use employee's specific shift if available, else fallback to global config
+            const rawStartTime = employee?.shift?.startTime || config.startTime;
             const [startHour, startMin] = rawStartTime.split(':').map(Number);
 
             const shiftStart = new Date(today);
             shiftStart.setHours(startHour, startMin, 0, 0);
 
-            const absoluteLatestCheckIn = new Date(today);
-            absoluteLatestCheckIn.setHours(startHour, startMin + (attSettings.absentThresholdMinutes || 30), 0, 0); 
-            
-            // Re-read: "30 minutes after absent". 
-            // If check-in is > 30 minutes after start, status is 'Absent'.
+            const graceThreshold = new Date(shiftStart);
+            graceThreshold.setMinutes(graceThreshold.getMinutes() + config.graceMinutes);
 
+            // Permission check (Short Leave)
             const approvedPermission = await Permission.findOne({
                 employee: employeeId,
                 date: today,
@@ -148,15 +145,33 @@ exports.checkIn = async (req, res, next) => {
             });
 
             if (approvedPermission) {
-                absoluteLatestCheckIn.setHours(absoluteLatestCheckIn.getHours() + approvedPermission.hoursRequest);
+                graceThreshold.setHours(graceThreshold.getHours() + approvedPermission.hoursRequest);
             }
 
-            if (checkInTime > shiftStart) {
+            if (config.latePolicyEnabled && checkInTime > shiftStart) {
                 lateBy = Math.round((checkInTime - shiftStart) / 60000);
-                isLate = true;
+                if (checkInTime > graceThreshold) {
+                    isLate = true;
+                }
             }
 
-            if (checkInTime > absoluteLatestCheckIn) {
+            // Monthly Late Check
+            if (isLate) {
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const lateCount = await Attendance.countDocuments({
+                    employee: employeeId,
+                    date: { $gte: monthStart, $lt: today },
+                    isLate: true
+                });
+
+                if (lateCount >= config.maxLateDaysPerMonth) {
+                    // Penalty: Convert next late to Half Day (default policy action)
+                    status = config.lateMarkType === 'half_day' ? 'Half Day' : 'Present';
+                }
+            }
+            
+            // Requirement: After 09:30 -> Absent (configurable)
+            if (isLate && config.lateAfterGraceAction === 'Absent') {
                 status = 'Absent';
             }
         } else {
@@ -259,42 +274,48 @@ exports.checkOut = async (req, res, next) => {
         // but if they check back in and check out AFTER 6:30 PM and finish >9 hrs, 
         // they will revert back to 'Present'.
         
-        const settings = await ComplianceSettings.findOne({ isActive: true });
-        const attSettings = settings?.attendanceSettings || {
-            checkInTime: '09:30',
-            checkOutTime: '18:30'
-        };
-
-        const [startHour, startMin] = attSettings.checkInTime.split(':').map(Number);
-        const [endHour, endMin] = attSettings.checkOutTime.split(':').map(Number);
-
-        const shiftEnd = new Date(today);
-        shiftEnd.setHours(endHour, endMin, 0, 0); // 6:30 PM default
+        // Final status logic based on Global Config
+        const config = await configService.getAttendanceConfig();
         
         // Permission check
-        const approvedPermission = await Permission.findOne({
-            employee: employeeId,
-            date: today,
-            status: 'Approved'
-        });
-
-        if (approvedPermission) {
-            shiftEnd.setHours(shiftEnd.getHours() - approvedPermission.hoursRequest);
+        let approvedPermission = null;
+        if (config.permissionEnabled) {
+            approvedPermission = await Permission.findOne({
+                employee: employeeId,
+                date: today,
+                status: 'Approved'
+            });
         }
 
-        const standardWorkHours = (endHour + endMin/60) - (startHour + startMin/60);
-        const requiredHours = approvedPermission ? (standardWorkHours - approvedPermission.hoursRequest) : standardWorkHours;
+        // Calculate required hours
+        let requiredHours = config.workingHours;
+        if (approvedPermission) {
+            // Permission deducts from working hours requirement
+            requiredHours = Math.max(0, config.workingHours - approvedPermission.hoursRequest);
+        }
 
-        // If they checked in late (marked Absent), they generally stay Absent. Follow initial rules.
-        // We only override to Present if they fixed criteria, or Absent if they fail criteria.
+        // Apply Status Logic (Requirement 5):
+        // IF totalHours >= requiredHours → Present
+        // IF totalHours < requiredHours → Half Day
+        // IF no check-in → Absent (handled by default absent status if no record exists)
+        
+        if (record.totalHours >= requiredHours) {
+            // Only set to Present if it wasn't already penalized to Half Day/Absent during check-in
+            if (record.status !== 'Half Day' && record.status !== 'Absent') {
+                record.status = 'Present';
+            }
+        } else {
+            // Less than required hours -> Half Day
+            record.status = 'Half Day';
+        }
+
+        // Check for Early Leave for stats
+        const [endHour, endMin] = config.endTime.split(':').map(Number);
+        const shiftEnd = new Date(today);
+        shiftEnd.setHours(endHour, endMin, 0, 0);
+
         if (checkOutTime < shiftEnd) {
             record.earlyLeaveBy = Math.round((shiftEnd - checkOutTime) / 60000);
-            record.status = 'Absent'; 
-        } else if (record.totalHours < requiredHours) {
-            record.status = 'Absent'; 
-        } else if (record.status !== 'Absent') {
-            // Keep present if not already marked absent at 10:01 AM check-in
-            record.status = 'Present';
         }
 
         // Half day detection (override if needed, but per strict rules, they are just Absent if they don't do 9 hours. I will disable Half Day to strictly follow prompt).
@@ -392,6 +413,37 @@ exports.requestRegularization = async (req, res, next) => {
         record.regularizationStatus = 'pending';
         record.regularizedReason = reason;
         await record.save();
+
+        // Notify for approval
+        const employee = await Employee.findById(record.employee).populate('reportingManager');
+        if (employee) {
+            if (employee.reportingManager) {
+                await sendEmail({
+                    to: employee.reportingManager.email,
+                    subject: `Attendance Regularization Request - ${employee.firstName} ${employee.lastName}`,
+                    template: 'genericNotification', // Assuming a generic template exists or using similar structure
+                    data: {
+                        recipientName: `${employee.reportingManager.firstName} ${employee.reportingManager.lastName}`,
+                        message: `${employee.firstName} ${employee.lastName} has requested attendance regularization for ${record.date.toDateString()}. Reason: ${reason}`,
+                        actionUrl: `${process.env.WEBSITE_URL}/dashboard/attendance`
+                    }
+                });
+            } else {
+                const admins = await Employee.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
+                for (const admin of admins) {
+                    await sendEmail({
+                        to: admin.email,
+                        subject: `[Approval Required] Attendance Regularization - ${employee.firstName} ${employee.lastName}`,
+                        template: 'genericNotification',
+                        data: {
+                            recipientName: `${admin.firstName} ${admin.lastName} (HR/Admin)`,
+                            message: `${employee.firstName} ${employee.lastName} has requested attendance regularization for ${record.date.toDateString()}. Reason: ${reason}`,
+                            actionUrl: `${process.env.WEBSITE_URL}/dashboard/attendance`
+                        }
+                    });
+                }
+            }
+        }
 
         res.status(200).json({ success: true, data: record, message: 'Regularization request submitted.' });
     } catch (error) { next(error); }

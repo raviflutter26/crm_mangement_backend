@@ -12,7 +12,8 @@
 const calculatePF = (basicSalary, pfSettings = {}) => {
     if (!pfSettings.enabled) return { employeePF: 0, employerPF: 0, adminCharges: 0, edliCharges: 0 };
 
-    const wageLimit = pfSettings.wageLimit || 15000;
+    // If wageLimit is explicitly null or 0, use full basic salary (no ceiling)
+    const wageLimit = pfSettings.wageLimit === 0 || pfSettings.wageLimit === null ? Infinity : (pfSettings.wageLimit || 15000);
     const pfWage = Math.min(basicSalary, wageLimit);
     const empRate = (pfSettings.employeeContribution || 12) / 100;
     const erRate = (pfSettings.employerContribution || 12) / 100;
@@ -37,7 +38,7 @@ const calculateESI = (grossSalary, esiSettings = {}) => {
     if (!esiSettings.enabled) return { employeeESI: 0, employerESI: 0 };
 
     const wageLimit = esiSettings.wageLimit || 21000;
-    if (grossSalary > wageLimit) return { employeeESI: 0, employerESI: 0 };
+    if (grossSalary >= wageLimit) return { employeeESI: 0, employerESI: 0 };
 
     const empRate = (esiSettings.employeeContribution || 0.75) / 100;
     const erRate = (esiSettings.employerContribution || 3.25) / 100;
@@ -146,9 +147,8 @@ const calculateSalaryBreakdown = (employee, compliance, workingDays = 26, presen
     const basic = Math.round((salary.basic || 0) * ratio);
     const hra = Math.round((salary.hra || 0) * ratio);
     const da = Math.round((salary.da || 0) * ratio);
-    const ta = Math.round((salary.ta || 0) * ratio);
     const specialAllowance = Math.round((salary.specialAllowance || 0) * ratio);
-    const grossEarnings = basic + hra + da + ta + specialAllowance;
+    const grossEarnings = basic + hra + da + specialAllowance;
 
     // PF (Merge global settings with employee-specific overrides)
     const pfResult = calculatePF(basic, {
@@ -161,6 +161,7 @@ const calculateSalaryBreakdown = (employee, compliance, workingDays = 26, presen
     // ESI (Merge global settings with employee-specific overrides)
     const esiResult = calculateESI(grossEarnings, {
         ...compliance?.esi,
+        wageLimit: employee.esiSalaryLimit ?? compliance?.esi?.wageLimit,
         enabled: employee.esiEnabled ?? (compliance?.esi?.enabled || false)
     });
 
@@ -177,7 +178,7 @@ const calculateSalaryBreakdown = (employee, compliance, workingDays = 26, presen
     const netPay = grossEarnings - totalDeductions;
 
     return {
-        earnings: { basic, hra, da, ta, specialAllowance },
+        earnings: { basic, hra, da, specialAllowance },
         grossEarnings,
         deductions: {
             pf: pfResult.employeePF,

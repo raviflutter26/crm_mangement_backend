@@ -23,6 +23,10 @@ const rolePermissionRoutes = require('./rolePermissionRoutes');
 const payrollReportRoutes = require('./payrollReportRoutes');
 const payoutRoutes = require('./payoutRoutes');
 const notificationRoutes = require('./notificationRoutes');
+const statutoryRoutes = require('./statutoryRoutes');
+const salaryTemplateRoutes = require('./salaryTemplateRoutes');
+const bankRoutes = require('./bankRoutes');
+const settingsRoutes = require('./settingsRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -49,6 +53,10 @@ router.use('/payroll-runs', payrollRunRoutes);
 router.use('/permissions', permissionRoutes);
 router.use('/role-permissions', rolePermissionRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/statutory', statutoryRoutes);
+router.use('/salary-templates', salaryTemplateRoutes);
+router.use('/bank', bankRoutes);
+router.use('/settings', settingsRoutes);
 
 // Health check
 router.get('/health', (req, res) => {
