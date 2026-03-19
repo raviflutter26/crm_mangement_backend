@@ -12,8 +12,10 @@ exports.getStatutoryConfig = async (req, res) => {
         
         if (!config) {
             // Create default config if none exists
+            // Link to a dummy ID if no companyId exists, should be 24-character hex
+            const dummyId = "000000000000000000000001"; 
             config = new StatutoryConfig({
-                companyId: req.user?.companyId || 'default-company-id', // Placeholder
+                companyId: req.user?.companyId || dummyId, 
                 epf: {
                     epfEnabled: true,
                     epfNumber: 'CB/SLM/2972534/000',

@@ -7,6 +7,16 @@ const attendanceSchema = new mongoose.Schema(
             ref: 'Employee',
             required: true,
         },
+        shift: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Shift',
+            default: null,
+        },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: false,
+        },
         date: {
             type: Date,
             required: true,

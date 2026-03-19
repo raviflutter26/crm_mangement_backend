@@ -7,6 +7,11 @@ const employeeSchema = new mongoose.Schema(
             unique: true,
             sparse: true,
         },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: false, // Temporary for transition
+        },
         employeeId: {
             type: String,
             required: true,

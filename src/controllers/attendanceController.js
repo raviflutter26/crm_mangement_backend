@@ -117,25 +117,31 @@ exports.checkIn = async (req, res, next) => {
 
         const checkInTime = new Date();
 
-        // Calculate late mark based on shift & permission
+        // Calculate late mark based on shift & organization
         let lateBy = 0;
         let isLate = false;
         let status = 'Present';
 
+        // Fetch employee details with shift and organization settings
+        const employee = await Employee.findById(employeeId).populate('shift').populate('organizationId');
+        
+        // Define effective settings (Priority: Shift > Organization > Global Default)
+        const shift = employee?.shift;
+        const orgSettings = employee?.organizationId?.attendanceSettings;
+        
+        const startTimeStr = shift?.startTime || orgSettings?.defaultStartTime || '09:00';
+        const graceMins = shift?.graceMinutes ?? orgSettings?.graceMinutes ?? 15;
+        const maxLate = shift?.maxLatePerMonth ?? orgSettings?.maxLatePerMonth ?? 3;
+
         // Only calculate late marks on the FIRST check-in of the day
         if (!record || record.sessions.length === 0) {
-            const employee = await Employee.findById(employeeId).populate('shift');
-            const config = await configService.getAttendanceConfig();
-            
-            // Use employee's specific shift if available, else fallback to global config
-            const rawStartTime = employee?.shift?.startTime || config.startTime;
-            const [startHour, startMin] = rawStartTime.split(':').map(Number);
+            const [startHour, startMin] = startTimeStr.split(':').map(Number);
 
             const shiftStart = new Date(today);
             shiftStart.setHours(startHour, startMin, 0, 0);
 
             const graceThreshold = new Date(shiftStart);
-            graceThreshold.setMinutes(graceThreshold.getMinutes() + config.graceMinutes);
+            graceThreshold.setMinutes(graceThreshold.getMinutes() + graceMins);
 
             // Permission check (Short Leave)
             const approvedPermission = await Permission.findOne({
@@ -148,14 +154,13 @@ exports.checkIn = async (req, res, next) => {
                 graceThreshold.setHours(graceThreshold.getHours() + approvedPermission.hoursRequest);
             }
 
-            if (config.latePolicyEnabled && checkInTime > shiftStart) {
+            if (checkInTime > shiftStart) {
                 lateBy = Math.round((checkInTime - shiftStart) / 60000);
                 if (checkInTime > graceThreshold) {
                     isLate = true;
                 }
             }
 
-            // Monthly Late Check
             if (isLate) {
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
                 const lateCount = await Attendance.countDocuments({
@@ -164,14 +169,14 @@ exports.checkIn = async (req, res, next) => {
                     isLate: true
                 });
 
-                if (lateCount >= config.maxLateDaysPerMonth) {
-                    // Penalty: Convert next late to Half Day (default policy action)
-                    status = config.lateMarkType === 'half_day' ? 'Half Day' : 'Present';
+                if (lateCount >= maxLate) {
+                    // Penalty: Convert next late to Half Day
+                    status = 'Half Day';
                 }
             }
             
-            // Requirement: After 09:30 -> Absent (configurable)
-            if (isLate && config.lateAfterGraceAction === 'Absent') {
+            // Organization-level cutoff for Absent (if provided)
+            if (isLate && orgSettings?.lateAfterGraceAction === 'Absent') {
                 status = 'Absent';
             }
         } else {
@@ -234,7 +239,35 @@ exports.checkOut = async (req, res, next) => {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const record = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
+        // Fetch employee to get assigned shift
+        const employee = await Employee.findById(employeeId).populate('shift').populate('organizationId');
+        const shift = employee?.shift;
+        const orgSettings = employee?.organizationId?.attendanceSettings;
+
+        let record;
+        // Night Shift Logic: If currently early morning, look for yesterday's record
+        if (shift?.isNightShift && today.getHours() < 12) {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yStart = new Date(yesterday);
+            yStart.setHours(0, 0, 0, 0);
+            const yEnd = new Date(today);
+            yEnd.setHours(0, 0, 0, 0);
+
+            record = await Attendance.findOne({ 
+                employee: employeeId, 
+                date: { $gte: yStart, $lt: yEnd },
+                'sessions.checkOut': null 
+            });
+        }
+
+        // Fallback to today's record
+        if (!record) {
+            record = await Attendance.findOne({ 
+                employee: employeeId, 
+                date: { $gte: today, $lt: tomorrow } 
+            });
+        }
 
         if (!record || !record.sessions || record.sessions.length === 0) {
             return res.status(400).json({ success: false, message: 'Must check in first.' });
@@ -274,38 +307,18 @@ exports.checkOut = async (req, res, next) => {
         // but if they check back in and check out AFTER 6:30 PM and finish >9 hrs, 
         // they will revert back to 'Present'.
         
-        // Final status logic based on Global Config
-        const config = await configService.getAttendanceConfig();
+        // Final status logic based on Shift/Org settings
+        const requiredHours = shift?.workingHours || orgSettings?.workingHours || 8;
         
-        // Permission check
-        let approvedPermission = null;
-        if (config.permissionEnabled) {
-            approvedPermission = await Permission.findOne({
-                employee: employeeId,
-                date: today,
-                status: 'Approved'
-            });
-        }
-
-        // Calculate required hours
-        let requiredHours = config.workingHours;
-        if (approvedPermission) {
-            // Permission deducts from working hours requirement
-            requiredHours = Math.max(0, config.workingHours - approvedPermission.hoursRequest);
-        }
-
-        // Apply Status Logic (Requirement 5):
+        // Apply Status Logic:
         // IF totalHours >= requiredHours → Present
         // IF totalHours < requiredHours → Half Day
-        // IF no check-in → Absent (handled by default absent status if no record exists)
         
         if (record.totalHours >= requiredHours) {
-            // Only set to Present if it wasn't already penalized to Half Day/Absent during check-in
             if (record.status !== 'Half Day' && record.status !== 'Absent') {
                 record.status = 'Present';
             }
         } else {
-            // Less than required hours -> Half Day
             record.status = 'Half Day';
         }
 

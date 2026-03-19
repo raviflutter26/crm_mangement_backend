@@ -1,197 +1,120 @@
+const Organization = require('../models/Organization');
 const Designation = require('../models/Designation');
 const Branch = require('../models/Branch');
-const Location = require('../models/Location');
-const Shift = require('../models/Shift');
 const Holiday = require('../models/Holiday');
 
-// =========== DESIGNATIONS ===========
-exports.getDesignations = async (req, res) => {
+/**
+ * @desc    Create a new organization
+ * @route   POST /api/organizations
+ */
+exports.createOrganization = async (req, res, next) => {
     try {
-        const data = await Designation.find().sort({ level: 1, name: 1 });
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        const { name, organizationId, workingDays, timezone, attendanceSettings } = req.body;
+
+        const existingOrg = await Organization.findOne({ organizationId: organizationId.toLowerCase() });
+        if (existingOrg) {
+            return res.status(400).json({ success: false, message: 'Organization ID already exists' });
+        }
+
+        const organization = await Organization.create({
+            name,
+            organizationId: organizationId.toLowerCase(),
+            workingDays,
+            timezone,
+            attendanceSettings
+        });
+
+        res.status(201).json({
+            success: true,
+            data: organization
+        });
+    } catch (error) {
+        next(error);
     }
 };
 
-exports.createDesignation = async (req, res) => {
+/**
+ * @desc    Get all organizations
+ * @route   GET /api/organizations
+ */
+exports.getOrganizations = async (req, res, next) => {
     try {
-        const doc = await Designation.create(req.body);
-        res.status(201).json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        const organizations = await Organization.find({ isActive: true });
+        res.status(200).json({
+            success: true,
+            data: organizations
+        });
+    } catch (error) {
+        next(error);
     }
 };
 
-exports.updateDesignation = async (req, res) => {
+/**
+ * @desc    Update organization settings
+ * @route   PUT /api/organizations/:id
+ */
+exports.updateOrganization = async (req, res, next) => {
     try {
-        const doc = await Designation.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-        res.json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        const organization = await Organization.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true
+        });
+
+        if (!organization) {
+            return res.status(404).json({ success: false, message: 'Organization not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: organization
+        });
+    } catch (error) {
+        next(error);
     }
 };
 
-exports.deleteDesignation = async (req, res) => {
+// --- Designations ---
+exports.getDesignations = async (req, res, next) => {
     try {
-        await Designation.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'Deleted' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        const designations = await Designation.find({ isActive: true });
+        res.status(200).json({ success: true, data: designations });
+    } catch (error) { next(error); }
 };
 
-// =========== BRANCHES ===========
-exports.getBranches = async (req, res) => {
+exports.createDesignation = async (req, res, next) => {
     try {
-        const data = await Branch.find().sort({ name: 1 });
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        const designation = await Designation.create(req.body);
+        res.status(201).json({ success: true, data: designation });
+    } catch (error) { next(error); }
 };
 
-exports.createBranch = async (req, res) => {
+// --- Branches ---
+exports.getBranches = async (req, res, next) => {
     try {
-        const doc = await Branch.create(req.body);
-        res.status(201).json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
+        const branches = await Branch.find({ isActive: true });
+        res.status(200).json({ success: true, data: branches });
+    } catch (error) { next(error); }
 };
 
-exports.updateBranch = async (req, res) => {
+exports.createBranch = async (req, res, next) => {
     try {
-        const doc = await Branch.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-        res.json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
+        const branch = await Branch.create(req.body);
+        res.status(201).json({ success: true, data: branch });
+    } catch (error) { next(error); }
 };
 
-exports.deleteBranch = async (req, res) => {
+// --- Holidays ---
+exports.getHolidays = async (req, res, next) => {
     try {
-        await Branch.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'Deleted' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        const year = req.query.year || new Date().getFullYear();
+        const holidays = await Holiday.find({ year: parseInt(year) }).sort({ date: 1 });
+        res.status(200).json({ success: true, data: holidays });
+    } catch (error) { next(error); }
 };
 
-// =========== LOCATIONS ===========
-exports.getLocations = async (req, res) => {
+exports.createHoliday = async (req, res, next) => {
     try {
-        const data = await Location.find().sort({ name: 1 });
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-};
-
-exports.createLocation = async (req, res) => {
-    try {
-        const doc = await Location.create(req.body);
-        res.status(201).json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.updateLocation = async (req, res) => {
-    try {
-        const doc = await Location.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-        res.json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.deleteLocation = async (req, res) => {
-    try {
-        await Location.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'Deleted' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-};
-
-// =========== SHIFTS ===========
-exports.getShifts = async (req, res) => {
-    try {
-        const data = await Shift.find().sort({ name: 1 });
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-};
-
-exports.createShift = async (req, res) => {
-    try {
-        const doc = await Shift.create(req.body);
-        res.status(201).json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.updateShift = async (req, res) => {
-    try {
-        const doc = await Shift.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-        res.json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.deleteShift = async (req, res) => {
-    try {
-        await Shift.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'Deleted' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-};
-
-// =========== HOLIDAYS ===========
-exports.getHolidays = async (req, res) => {
-    try {
-        const filter = {};
-        if (req.query.year) filter.year = parseInt(req.query.year);
-        const data = await Holiday.find(filter).sort({ date: 1 });
-        res.json({ success: true, data });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-};
-
-exports.createHoliday = async (req, res) => {
-    try {
-        const doc = await Holiday.create(req.body);
-        res.status(201).json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.updateHoliday = async (req, res) => {
-    try {
-        const doc = await Holiday.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-        res.json({ success: true, data: doc });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.deleteHoliday = async (req, res) => {
-    try {
-        await Holiday.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'Deleted' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        const holiday = await Holiday.create(req.body);
+        res.status(201).json({ success: true, data: holiday });
+    } catch (error) { next(error); }
 };

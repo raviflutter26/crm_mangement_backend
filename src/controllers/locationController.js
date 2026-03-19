@@ -1,4 +1,5 @@
 const axios = require('axios');
+const Location = require('../models/Location');
 
 // In-memory cache for states and districts
 const stateCache = new Map();
@@ -208,5 +209,75 @@ exports.getCities = async (req, res, next) => {
             success: false,
             message: 'Internal server error while fetching cities/districts.'
         });
+    }
+};
+
+// --- Actual Location CRUD for Organization Structure ---
+
+/**
+ * @desc    Get all locations
+ * @route   GET /api/locations
+ */
+exports.getLocations = async (req, res, next) => {
+    try {
+        const locations = await Location.find({ isActive: true });
+        res.status(200).json({
+            success: true,
+            data: locations
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Create new location
+ * @route   POST /api/locations
+ */
+exports.createLocation = async (req, res, next) => {
+    try {
+        const location = await Location.create(req.body);
+        res.status(201).json({
+            success: true,
+            data: location
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Update location
+ * @route   PUT /api/locations/:id
+ */
+exports.updateLocation = async (req, res, next) => {
+    try {
+        const location = await Location.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true
+        });
+        if (!location) return res.status(404).json({ success: false, message: 'Location not found' });
+        res.status(200).json({
+            success: true,
+            data: location
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Delete location (Soft delete)
+ */
+exports.deleteLocation = async (req, res, next) => {
+    try {
+        const location = await Location.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+        if (!location) return res.status(404).json({ success: false, message: 'Location not found' });
+        res.status(200).json({
+            success: true,
+            message: 'Location deleted successfully'
+        });
+    } catch (error) {
+        next(error);
     }
 };

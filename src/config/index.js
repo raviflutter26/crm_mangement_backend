@@ -39,23 +39,24 @@ const config = {
 
   // CORS
   cors: {
-    origin: function (origin, callback) {
+    origin: (origin, callback) => {
+      // In development, allow all origins for easier debugging (including dev tunnels)
+      if (process.env.NODE_ENV === 'development' || !origin) {
+        return callback(null, true);
+      }
+
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:3001',
         'http://127.0.0.1:3000',
         'https://crm-mangement-website-eight.vercel.app',
-        process.env.WEBSITE_URL || 'http://localhost:3000',
-      ];
+        process.env.WEBSITE_URL
+      ].filter(Boolean);
 
-      // Allow dev tunnel URLs and any origin in development
-      if (process.env.NODE_ENV === 'development') {
-        return callback(null, true);
-      }
-
-      if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.warn(`⚠️ CORS blocked for origin: ${origin}`);
         callback(new Error('CORS not allowed'));
       }
     },

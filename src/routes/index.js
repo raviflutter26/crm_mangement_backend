@@ -29,6 +29,8 @@ const bankRoutes = require('./bankRoutes');
 const settingsRoutes = require('./settingsRoutes');
 const attendanceConfigRoutes = require('./attendanceConfigRoutes');
 const locationRoutes = require('./locationRoutes');
+const shiftRoutes = require('./shiftRoutes');
+const salaryComponentRoutes = require('./salaryComponentRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -44,6 +46,7 @@ router.use('/payouts', payoutRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/organization', organizationRoutes);
+router.use('/organizations', organizationRoutes); // Alias for plural support
 router.use('/recruitment', recruitmentRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/expenses', expenseRoutes);
@@ -61,6 +64,8 @@ router.use('/bank', bankRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/attendance-config', attendanceConfigRoutes);
 router.use('/locations', locationRoutes);
+router.use('/shifts', shiftRoutes);
+router.use('/salary-components', salaryComponentRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

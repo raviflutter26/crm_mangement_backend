@@ -1,36 +1,30 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate: auth } = require('../middleware/auth');
-const ctrl = require('../controllers/organizationController');
+const organizationController = require('../controllers/organizationController');
+const { authenticate, authorize } = require('../middleware/auth');
+const shiftRoutes = require('./shiftRoutes');
+const locationRoutes = require('./locationRoutes');
 
-// Designations
-router.get('/designations', auth, ctrl.getDesignations);
-router.post('/designations', auth, ctrl.createDesignation);
-router.put('/designations/:id', auth, ctrl.updateDesignation);
-router.delete('/designations/:id', auth, ctrl.deleteDesignation);
+// Public or Protected depending on requirement, usually Admin only
+router.use(authenticate);
 
-// Branches
-router.get('/branches', auth, ctrl.getBranches);
-router.post('/branches', auth, ctrl.createBranch);
-router.put('/branches/:id', auth, ctrl.updateBranch);
-router.delete('/branches/:id', auth, ctrl.deleteBranch);
+// Organization Management
+router.post('/', authorize('Admin'), organizationController.createOrganization);
+router.get('/', organizationController.getOrganizations);
+router.put('/:id', authorize('Admin'), organizationController.updateOrganization);
 
-// Locations
-router.get('/locations', auth, ctrl.getLocations);
-router.post('/locations', auth, ctrl.createLocation);
-router.put('/locations/:id', auth, ctrl.updateLocation);
-router.delete('/locations/:id', auth, ctrl.deleteLocation);
+// Sub-resources (Designations, Branches, Holidays)
+router.get('/designations', organizationController.getDesignations);
+router.post('/designations', authorize('Admin'), organizationController.createDesignation);
 
-// Shifts
-router.get('/shifts', auth, ctrl.getShifts);
-router.post('/shifts', auth, ctrl.createShift);
-router.put('/shifts/:id', auth, ctrl.updateShift);
-router.delete('/shifts/:id', auth, ctrl.deleteShift);
+router.get('/branches', organizationController.getBranches);
+router.post('/branches', authorize('Admin'), organizationController.createBranch);
 
-// Holidays
-router.get('/holidays', auth, ctrl.getHolidays);
-router.post('/holidays', auth, ctrl.createHoliday);
-router.put('/holidays/:id', auth, ctrl.updateHoliday);
-router.delete('/holidays/:id', auth, ctrl.deleteHoliday);
+router.get('/holidays', organizationController.getHolidays);
+router.post('/holidays', authorize('Admin'), organizationController.createHoliday);
+
+// Nested routes to support legacy frontend paths
+router.use('/shifts', shiftRoutes);
+router.use('/locations', locationRoutes);
 
 module.exports = router;

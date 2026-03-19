@@ -26,6 +26,14 @@ console.log('🔍 Detected Environment Variables:',
 // Security headers
 app.use(helmet());
 
+// Debug: Log incoming request info in development
+if (config.env === 'development') {
+    app.use((req, res, next) => {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Origin: ${req.headers.origin || 'No Origin'}`);
+        next();
+    });
+}
+
 // CORS
 app.use(cors({
     origin: config.cors.origin,
