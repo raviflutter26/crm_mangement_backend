@@ -18,7 +18,9 @@ const payrollRunSchema = new mongoose.Schema(
         totalPF: { type: Number, default: 0 },
         totalESI: { type: Number, default: 0 },
         totalPT: { type: Number, default: 0 },
+        totalLWF: { type: Number, default: 0 },
         totalTDS: { type: Number, default: 0 },
+        totalBonus: { type: Number, default: 0 },
         totalEmployerPF: { type: Number, default: 0 },
         totalEmployerESI: { type: Number, default: 0 },
         // Linked payroll records

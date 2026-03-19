@@ -1,8 +1,9 @@
+const mongoose = require('mongoose');
 const PayrollRun = require('../models/PayrollRun');
 const Payroll = require('../models/Payroll');
 const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
-const ComplianceSettings = require('../models/ComplianceSettings');
+const StatutoryConfig = require('../models/StatutoryConfig');
 const { calculateSalaryBreakdown } = require('../utils/taxCalculator');
 
 // Get all payroll runs
@@ -43,10 +44,10 @@ exports.initiatePayrollRun = async (req, res, next) => {
         const existing = await PayrollRun.findOne({ month: parseInt(month), year: parseInt(year) });
         if (existing) return res.status(400).json({ success: false, message: `Payroll run already exists for ${month}/${year}. RunID: ${existing.runId}` });
 
-        // Get compliance settings
-        let compliance = await ComplianceSettings.findOne({ isActive: true });
-        if (!compliance) {
-            compliance = { pf: { enabled: true, employeeContribution: 12, employerContribution: 12, wageLimit: 15000 }, esi: { enabled: true, employeeContribution: 0.75, employerContribution: 3.25, wageLimit: 21000 }, professionalTax: { enabled: true }, tds: { enabled: true } };
+        // Get statutory config
+        let config = await StatutoryConfig.findOne({});
+        if (!config) {
+            config = await StatutoryConfig.create({ companyId: req.user?.companyId || new mongoose.Types.ObjectId() });
         }
 
         // Get all active employees
@@ -72,7 +73,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
 
         const payrollRecords = [];
         let totalGross = 0, totalDed = 0, totalNet = 0;
-        let totalPF = 0, totalESI = 0, totalPT = 0, totalTDS = 0;
+        let totalPF = 0, totalESI = 0, totalPT = 0, totalTDS = 0, totalLWF = 0, totalBonus = 0;
         let totalErPF = 0, totalErESI = 0;
 
         for (const emp of employees) {
@@ -93,7 +94,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
             const leaveDays = workingDays - presentDays;
 
             // Calculate salary breakdown using tax calculator
-            const breakdown = calculateSalaryBreakdown(emp, compliance, workingDays, presentDays);
+            const breakdown = calculateSalaryBreakdown(emp, config, workingDays, presentDays);
 
             // Create individual payroll record
             const payrollRecord = await Payroll.create({
@@ -112,10 +113,11 @@ exports.initiatePayrollRun = async (req, res, next) => {
                     esi: breakdown.deductions.esi,
                     tax: breakdown.deductions.tds,
                     professionalTax: breakdown.deductions.professionalTax,
+                    lwf: breakdown.deductions.lwf
                 },
-                totalEarnings: breakdown.grossEarnings,
+                totalEarnings: breakdown.grossEarnings + (breakdown.bonus || 0),
                 totalDeductions: breakdown.totalDeductions,
-                netPay: breakdown.netPay,
+                netPay: (breakdown.grossEarnings + (breakdown.bonus || 0)) - breakdown.totalDeductions,
                 workingDays,
                 presentDays,
                 leaveDays,
@@ -131,7 +133,9 @@ exports.initiatePayrollRun = async (req, res, next) => {
             totalPT += breakdown.deductions.professionalTax;
             totalTDS += breakdown.deductions.tds;
             totalErPF += breakdown.employerContributions.pf;
-            totalErESI += breakdown.employerContributions.esi;
+            totalErESI += (breakdown.employerContributions.esi || 0);
+            totalLWF += (breakdown.deductions.lwf || 0);
+            totalBonus += (breakdown.bonus || 0);
         }
 
         // Update payroll run with totals
@@ -145,6 +149,8 @@ exports.initiatePayrollRun = async (req, res, next) => {
         payrollRun.totalTDS = totalTDS;
         payrollRun.totalEmployerPF = totalErPF;
         payrollRun.totalEmployerESI = totalErESI;
+        payrollRun.totalLWF = totalLWF;
+        payrollRun.totalBonus = totalBonus;
         payrollRun.status = 'review';
         await payrollRun.save();
 

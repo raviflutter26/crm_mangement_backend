@@ -98,35 +98,73 @@ exports.createEmployee = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const { firstName, lastName, email, role = 'Employee', panNumber } = req.body;
+        const { 
+            firstName, lastName, email, phone, role = 'Employee', panNumber, uan, esiNumber, address 
+        } = req.body;
 
-        // 1. Backend PAN Format Validation (Double Check)
-        if (panNumber) {
-            const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-            if (!panRegex.test(panNumber.toUpperCase())) {
-                return res.status(400).json({ success: false, message: 'Invalid PAN format. Example: ABCDE1234F' });
-            }
-        } else {
-            return res.status(400).json({ success: false, message: 'PAN Number is required' });
+        // 1. Mandatory Field Validation
+        if (!firstName || !lastName || !email || !panNumber) {
+            return res.status(400).json({ success: false, message: 'First Name, Last Name, Email, and PAN Number are required.' });
         }
 
-        // 2. Cross-Collection Duplicate Check (Critical)
+        // 2. Format & Pattern Validations
+        // PAN Number
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        if (!panRegex.test(panNumber.toUpperCase())) {
+            return res.status(400).json({ success: false, message: 'Invalid PAN format. Example: ABCDE1234F' });
+        }
+
+        // Pincode (6 digits)
+        if (address?.pincode) {
+            if (!/^[0-9]{6}$/.test(address.pincode)) {
+                return res.status(400).json({ success: false, message: 'Invalid Pincode. Must be exactly 6 digits.' });
+            }
+        }
+
+        // UAN (12 digits)
+        if (uan) {
+            if (!/^[0-9]{12}$/.test(uan)) {
+                return res.status(400).json({ success: false, message: 'Invalid UAN. Must be exactly 12 digits.' });
+            }
+        }
+
+        // ESI (10 to 17 digits)
+        if (esiNumber) {
+            if (!/^[0-9]{10,17}$/.test(esiNumber)) {
+                return res.status(400).json({ success: false, message: 'Invalid ESI Number. Must be 10-17 digits long.' });
+            }
+        }
+
+        // Phone Number (10 to 12 digits)
+        if (phone && !/^[0-9]{10,12}$/.test(phone)) {
+            return res.status(400).json({ success: false, message: 'Invalid Phone Number. Must be 10-12 digits.' });
+        }
+
+        // 3. Cross-Collection Duplicate Check (Critical)
+        const duplicateQuery = { 
+            $or: [
+                { email: email.toLowerCase() }, 
+                { panNumber: panNumber.toUpperCase() }
+            ] 
+        };
+        if (phone) duplicateQuery.$or.push({ phone: phone });
+
         // Check Users collection
-        const userExists = await User.findOne({ 
-            $or: [{ email: email.toLowerCase() }, { panNumber: panNumber.toUpperCase() }] 
-        });
+        const userExists = await User.findOne(duplicateQuery);
         if (userExists) {
-            const field = userExists.email === email.toLowerCase() ? 'Email' : 'PAN';
-            return res.status(400).json({ success: false, message: `${field} already exists in User system.` });
+            let field = 'Email';
+            if (userExists.panNumber === panNumber.toUpperCase()) field = 'PAN';
+            if (userExists.phone === phone) field = 'Phone';
+            return res.status(400).json({ success: false, message: `Employee already exists (${field} matches existing record).` });
         }
 
         // Check Employees collection
-        const employeeExists = await Employee.findOne({ 
-            $or: [{ email: email.toLowerCase() }, { panNumber: panNumber.toUpperCase() }] 
-        });
+        const employeeExists = await Employee.findOne(duplicateQuery);
         if (employeeExists) {
-            const field = employeeExists.email === email.toLowerCase() ? 'Email' : 'PAN';
-            return res.status(400).json({ success: false, message: `${field} already registered in Employee records.` });
+            let field = 'Email';
+            if (employeeExists.panNumber === panNumber.toUpperCase()) field = 'PAN';
+            if (employeeExists.phone === phone) field = 'Phone';
+            return res.status(400).json({ success: false, message: `Employee already registered (${field} matches existing record).` });
         }
 
         // 3. Create Employee within transaction

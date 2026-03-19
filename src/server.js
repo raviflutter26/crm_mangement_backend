@@ -9,6 +9,7 @@ const config = require('./config');
 const connectDB = require('./config/database');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
+const PayrollScheduler = require('./scheduler/payrollCron');
 
 const app = express();
 
@@ -84,6 +85,9 @@ const startServer = async () => {
     try {
         // Connect to MongoDB
         await connectDB();
+
+        // Initialize Automated Payroll Scheduler
+        PayrollScheduler.init();
 
         app.listen(config.port, () => {
             console.log(`

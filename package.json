@@ -33,7 +33,9 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.1",
     "morgan": "^1.10.1",
-    "nodemailer": "^8.0.2"
+    "node-cron": "^3.0.3",
+    "nodemailer": "^8.0.2",
+    "puppeteer": "^24.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

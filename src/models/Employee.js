@@ -81,29 +81,44 @@ const employeeSchema = new mongoose.Schema(
             enum: ['Full-time', 'Contract', 'Intern', 'Part-time', 'Probation', null],
             default: 'Full-time',
         },
-        // Statutory compliance fields
-        panNumber: { 
-            type: String, 
-            default: null,
-            unique: true,
-            sparse: true,
-            uppercase: true,
-            match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Please provide a valid PAN number']
+        statutory: {
+            pf: {
+                epfEnabled: { type: Boolean, default: true },
+                uanNumber: { type: String, default: null },
+                epfNumber: { type: String, default: null },
+                pfJoiningDate: { type: Date, default: null },
+                contributionPreferences: {
+                    employerPFContribution: { type: Boolean, default: true },
+                    edliContribution: { type: Boolean, default: true },
+                    adminCharges: { type: Boolean, default: true }
+                },
+                allowEmployeeLevelOverride: { type: Boolean, default: false },
+                proRateRestrictedPFWage: { type: Boolean, default: true },
+                considerSalaryComponentsOnLOP: { type: Boolean, default: true },
+                eligibleForABRYScheme: { type: Boolean, default: false }
+            },
+            esi: {
+                esiEnabled: { type: Boolean, default: true },
+                esiNumber: { type: String, default: null },
+                esiJoiningDate: { type: Date, default: null },
+                esiDeductionCycle: { type: String, default: 'Monthly' },
+                esiSalaryLimit: { type: Number, default: 21000 }
+            },
+            pt: {
+                ptEnabled: { type: Boolean, default: true },
+                ptRegistrationNumber: { type: String, default: null },
+                ptDeductionCycle: { type: String, default: 'Half Yearly' }
+            },
+            lwf: {
+                lwfEnabled: { type: Boolean, default: true },
+                lwfAccountNumber: { type: String, default: null },
+                lwfDeductionCycle: { type: String, default: 'Yearly' }
+            },
+            statutoryBonus: {
+                statutoryBonusEnabled: { type: Boolean, default: true },
+                bonusAmount: { type: Number, default: 0 }
+            }
         },
-        aadhaar: { type: String, default: null },
-        passportNumber: { type: String, default: null },
-        drivingLicense: { type: String, default: null },
-        uan: { type: String, default: null }, // PF Universal Account Number
-        pfNumber: { type: String, default: null },
-        pfJoiningDate: { type: Date, default: null },
-        pfEmployeeContributionRate: { type: Number, default: 12 },
-        pfEmployerContributionRate: { type: Number, default: 12 },
-        esiNumber: { type: String, default: null },
-        esiJoiningDate: { type: Date, default: null },
-        esiDispensary: { type: String, default: null },
-        pfEnabled: { type: Boolean, default: true },
-        esiEnabled: { type: Boolean, default: true },
-        esiSalaryLimit: { type: Number, default: 21000 },
         taxRegime: { type: String, enum: ['old', 'new', null], default: 'new' },
         salaryStructure: { type: String, default: 'Standard' },
         ctc: { type: Number, default: 0 },
@@ -124,6 +139,10 @@ const employeeSchema = new mongoose.Schema(
             state: String,
             country: String,
             zipCode: String,
+            pincode: { 
+                type: String, 
+                match: [/^[0-9]{6}$/, 'Please provide a valid 6-digit pincode'] 
+            },
         },
         bankDetails: {
             accountHolderName: { type: String, trim: true },

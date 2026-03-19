@@ -94,28 +94,30 @@ const payrollSchema = new mongoose.Schema(
 payrollSchema.index({ employee: 1, month: 1, year: 1 }, { unique: true });
 
 // Calculate totals before saving
-payrollSchema.pre('save', function () {
+payrollSchema.pre('save', function (next) {
     const earnings = this.earnings;
     this.totalEarnings =
-        earnings.basic +
-        earnings.hra +
-        earnings.da +
-        earnings.ta +
-        earnings.specialAllowance +
-        earnings.bonus +
-        earnings.overtime +
-        earnings.otherEarnings;
+        (earnings.basic || 0) +
+        (earnings.hra || 0) +
+        (earnings.da || 0) +
+        (earnings.ta || 0) +
+        (earnings.specialAllowance || 0) +
+        (earnings.bonus || 0) +
+        (earnings.overtime || 0) +
+        (earnings.otherEarnings || 0);
 
     const deductions = this.deductions;
     this.totalDeductions =
-        deductions.pf +
-        deductions.esi +
-        deductions.tax +
-        deductions.professionalTax +
-        deductions.loanDeduction +
-        deductions.otherDeductions;
+        (deductions.pf || 0) +
+        (deductions.esi || 0) +
+        (deductions.tax || 0) +
+        (deductions.professionalTax || 0) +
+        (deductions.lwf || 0) +
+        (deductions.loanDeduction || 0) +
+        (deductions.otherDeductions || 0);
 
     this.netPay = this.totalEarnings - this.totalDeductions;
+    next();
 });
 
 module.exports = mongoose.model('Payroll', payrollSchema);

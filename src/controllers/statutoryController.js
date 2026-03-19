@@ -1,158 +1,202 @@
-const Payroll = require('../models/Payroll');
+const StatutoryConfig = require('../models/StatutoryConfig');
 const Employee = require('../models/Employee');
-const PayrollRun = require('../models/PayrollRun');
+const { calculateEPF } = require('../utils/statutoryCalc');
 
 /**
- * @desc    Get PF Report
- * @route   GET /api/statutory/pf-report
+ * Get global statutory configuration for the company
  */
-exports.getPFReport = async (req, res, next) => {
+exports.getStatutoryConfig = async (req, res) => {
     try {
-        const { month, year, department, employeeId } = req.query;
-        if (!month || !year) {
-            return res.status(400).json({ success: false, message: 'Month and year are required.' });
-        }
-
-        const query = { month: parseInt(month), year: parseInt(year) };
+        // For now, assuming a single global config. In a multi-tenant app, filter by companyId.
+        let config = await StatutoryConfig.findOne();
         
-        // Find payroll records
-        let payrolls = await Payroll.find(query)
-            .populate({
-                path: 'employee',
-                select: 'firstName lastName employeeId department designations uan pfNumber',
-                match: department && department !== 'All' ? { department } : {}
+        if (!config) {
+            // Create default config if none exists
+            config = new StatutoryConfig({
+                companyId: req.user?.companyId || 'default-company-id', // Placeholder
+                epf: {
+                    epfEnabled: true,
+                    epfNumber: 'CB/SLM/2972534/000',
+                    deductionCycle: 'Monthly',
+                    employeeContributionRate: 12,
+                    employerContributionMode: 'Restrict to ₹15,000 of PF Wage'
+                },
+                esi: {
+                    esiEnabled: true,
+                    esiNumber: '56-00-140218-000-0607',
+                    esiDeductionCycle: 'Monthly'
+                },
+                professionalTax: {
+                    ptEnabled: true,
+                    ptState: 'Tamil Nadu',
+                    ptDeductionCycle: 'Half Yearly'
+                },
+                labourWelfareFund: {
+                    lwfEnabled: true,
+                    lwfState: 'Tamil Nadu',
+                    lwfDeductionCycle: 'Yearly'
+                },
+                statutoryBonus: {
+                    statutoryBonusEnabled: true,
+                    bonusPercentage: 8.33,
+                    eligibilityLimit: 21000,
+                    paymentFrequency: 'Yearly'
+                }
             });
-
-        // Filter out records where employee didn't match department or isn't populated
-        payrolls = payrolls.filter(p => p.employee && p.deductions.pf > 0);
-
-        if (employeeId) {
-            payrolls = payrolls.filter(p => p.employee._id.toString() === employeeId || p.employee.employeeId === employeeId);
+            await config.save();
         }
-
-        const reportData = payrolls.map(p => ({
-            employeeId: p.employee.employeeId,
-            name: `${p.employee.firstName} ${p.employee.lastName}`,
-            uan: p.employee.uan || 'N/A',
-            pfNumber: p.employee.pfNumber || 'N/A',
-            basicSalary: p.earnings.basic,
-            employeePF: p.deductions.pf,
-            employerPF: p.employerContribution?.pf || Math.round(p.earnings.basic * 0.12), // Fallback logic if not stored
-        }));
-
-        res.status(200).json({
-            success: true,
-            count: reportData.length,
-            data: reportData
-        });
+        
+        res.status(200).json({ success: true, data: config });
     } catch (error) {
-        next(error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
 /**
- * @desc    Get ESI Report
- * @route   GET /api/statutory/esi-report
+ * Update specifically EPF settings
  */
-exports.getESIReport = async (req, res, next) => {
+exports.updateEPFConfig = async (req, res) => {
     try {
-        const { month, year, department, employeeId } = req.query;
-        if (!month || !year) {
-            return res.status(400).json({ success: false, message: 'Month and year are required.' });
-        }
-
-        const query = { month: parseInt(month), year: parseInt(year) };
-        
-        let payrolls = await Payroll.find(query)
-            .populate({
-                path: 'employee',
-                select: 'firstName lastName employeeId department designation esiNumber',
-                match: department && department !== 'All' ? { department } : {}
-            });
-
-        payrolls = payrolls.filter(p => p.employee && p.deductions.esi > 0);
-
-        if (employeeId) {
-            payrolls = payrolls.filter(p => p.employee._id.toString() === employeeId || p.employee.employeeId === employeeId);
-        }
-
-        const reportData = payrolls.map(p => ({
-            employeeId: p.employee.employeeId,
-            name: `${p.employee.firstName} ${p.employee.lastName}`,
-            esiNumber: p.employee.esiNumber || 'N/A',
-            grossSalary: p.totalEarnings,
-            employeeESI: p.deductions.esi,
-            employerESI: p.employerContribution?.esi || Math.round(p.totalEarnings * 0.0325),
-        }));
-
-        res.status(200).json({
-            success: true,
-            count: reportData.length,
-            data: reportData
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Update Employee Statutory Fields
- * @route   POST /api/statutory/employee-update
- */
-exports.updateEmployeeStatutory = async (req, res, next) => {
-    try {
-        const { employeeId, pfEnabled, pfNumber, esiEnabled, esiNumber, uanNumber, esiSalaryLimit } = req.body;
-        
-        const employee = await Employee.findByIdAndUpdate(
-            employeeId,
-            { 
-                pfEnabled, 
-                pfNumber, 
-                esiEnabled, 
-                esiNumber, 
-                uan: uanNumber, // mapping uanNumber to uan field in DB
-                esiSalaryLimit 
-            },
-            { new: true, runValidators: true }
+        const config = await StatutoryConfig.findOneAndUpdate(
+            {},
+            { $set: { epf: req.body } },
+            { new: true, upsert: true }
         );
-
-        if (!employee) {
-            return res.status(404).json({ success: false, message: 'Employee not found.' });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Statutory fields updated successfully.',
-            data: employee
-        });
+        res.status(200).json({ success: true, data: config.epf });
     } catch (error) {
-        next(error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
 /**
- * @desc    Get Statutory Dashboard Stats
- * @route   GET /api/statutory/dashboard
+ * Update ESI settings
  */
-exports.getStatutoryStats = async (req, res, next) => {
+exports.updateESIConfig = async (req, res) => {
     try {
-        const totalPFEmployees = await Employee.countDocuments({ pfEnabled: true });
-        const totalESIEmployees = await Employee.countDocuments({ esiEnabled: true });
-
-        // Get totals from last approved payroll run
-        const lastRun = await PayrollRun.findOne({ status: 'paid' }).sort({ year: -1, month: -1 });
-        
-        res.status(200).json({
-            success: true,
-            data: {
-                totalPFEmployees,
-                totalESIEmployees,
-                totalPFContribution: lastRun ? (lastRun.totalPF + lastRun.totalEmployerPF) : 0,
-                totalESIContribution: lastRun ? (lastRun.totalESI + lastRun.totalEmployerESI) : 0,
-                lastMonth: lastRun ? `${lastRun.month}/${lastRun.year}` : 'N/A'
-            }
-        });
+        const config = await StatutoryConfig.findOneAndUpdate(
+            {},
+            { $set: { esi: req.body } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json({ success: true, data: config.esi });
     } catch (error) {
-        next(error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Update Professional Tax settings
+ */
+exports.updatePTConfig = async (req, res) => {
+    try {
+        const config = await StatutoryConfig.findOneAndUpdate(
+            {},
+            { $set: { professionalTax: req.body } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json({ success: true, data: config.professionalTax });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Update LWF settings
+ */
+exports.updateLWFConfig = async (req, res) => {
+    try {
+        const config = await StatutoryConfig.findOneAndUpdate(
+            {},
+            { $set: { labourWelfareFund: req.body } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json({ success: true, data: config.labourWelfareFund });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Update Statutory Bonus settings
+ */
+exports.updateBonusConfig = async (req, res) => {
+    try {
+        const config = await StatutoryConfig.findOneAndUpdate(
+            {},
+            { $set: { statutoryBonus: req.body } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json({ success: true, data: config.statutoryBonus });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get employee-specific statutory details
+ */
+exports.getEmployeeStatutory = async (req, res) => {
+    try {
+        const employee = await Employee.findById(req.params.employeeId).select('statutory');
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+        res.status(200).json({ success: true, data: employee.statutory });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Update employee-specific statutory details
+ */
+exports.updateEmployeeStatutory = async (req, res) => {
+    try {
+        const employee = await Employee.findByIdAndUpdate(
+            req.params.employeeId,
+            { $set: { statutory: req.body } },
+            { new: true }
+        ).select('statutory');
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+        res.status(200).json({ success: true, data: employee.statutory });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * EPF Calculation Preview
+ */
+exports.previewEPFCalculation = async (req, res) => {
+    try {
+        const { pfWage } = req.body;
+        const config = await StatutoryConfig.findOne();
+        if (!config) return res.status(404).json({ success: false, message: 'Statutory config not found' });
+        
+        const calculation = calculateEPF(pfWage || 0, config.epf);
+        res.status(200).json({ success: true, data: calculation });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get PT Slabs for a state
+ */
+exports.getPTSlabs = async (req, res) => {
+    try {
+        const { state } = req.params;
+        // In a real app, this might come from a dedicated lookup table.
+        // For now, returning default Tamil Nadu slabs if state is TN.
+        if (state === 'Tamil Nadu') {
+            return res.status(200).json({
+                success: true,
+                data: [
+                    { minSalary: 0, maxSalary: 21000, taxAmount: 0 },
+                    { minSalary: 21001, maxSalary: null, taxAmount: 208.33 }
+                ]
+            });
+        }
+        res.status(200).json({ success: true, data: [] });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 };
