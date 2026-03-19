@@ -27,6 +27,7 @@ const statutoryRoutes = require('./statutoryRoutes');
 const salaryTemplateRoutes = require('./salaryTemplateRoutes');
 const bankRoutes = require('./bankRoutes');
 const settingsRoutes = require('./settingsRoutes');
+const attendanceConfigRoutes = require('./attendanceConfigRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -57,6 +58,7 @@ router.use('/statutory', statutoryRoutes);
 router.use('/salary-templates', salaryTemplateRoutes);
 router.use('/bank', bankRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/attendance-config', attendanceConfigRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

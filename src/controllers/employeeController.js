@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const zohoPeopleService = require('../services/zohoPeopleService');
@@ -93,51 +94,95 @@ exports.getEmployee = async (req, res, next) => {
  * @route   POST /api/employees
  */
 exports.createEmployee = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const { firstName, lastName, email, role = 'Employee' } = req.body;
+        const { firstName, lastName, email, role = 'Employee', panNumber } = req.body;
 
-        // 1. Create Employee
-        const employee = await Employee.create(req.body);
+        // 1. Backend PAN Format Validation (Double Check)
+        if (panNumber) {
+            const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+            if (!panRegex.test(panNumber.toUpperCase())) {
+                return res.status(400).json({ success: false, message: 'Invalid PAN format. Example: ABCDE1234F' });
+            }
+        } else {
+            return res.status(400).json({ success: false, message: 'PAN Number is required' });
+        }
 
-        // 2. Create or sync associated User
-        let user = await User.findOne({ email });
-        
+        // 2. Cross-Collection Duplicate Check (Critical)
+        // Check Users collection
+        const userExists = await User.findOne({ 
+            $or: [{ email: email.toLowerCase() }, { panNumber: panNumber.toUpperCase() }] 
+        });
+        if (userExists) {
+            const field = userExists.email === email.toLowerCase() ? 'Email' : 'PAN';
+            return res.status(400).json({ success: false, message: `${field} already exists in User system.` });
+        }
+
+        // Check Employees collection
+        const employeeExists = await Employee.findOne({ 
+            $or: [{ email: email.toLowerCase() }, { panNumber: panNumber.toUpperCase() }] 
+        });
+        if (employeeExists) {
+            const field = employeeExists.email === email.toLowerCase() ? 'Email' : 'PAN';
+            return res.status(400).json({ success: false, message: `${field} already registered in Employee records.` });
+        }
+
+        // 3. Create Employee within transaction
+        const employee = new Employee({
+            ...req.body,
+            email: email.toLowerCase(),
+            panNumber: panNumber.toUpperCase()
+        });
+        await employee.save({ session });
+
+        // 4. Create associated User within transaction
         const userData = {
             name: `${firstName} ${lastName}`,
-            email,
-            password: null, // Force null to trigger the "Set Password" flow
+            email: email.toLowerCase(),
+            panNumber: panNumber.toUpperCase(),
+            password: null, // Force null to trigger "Set Password" flow
             role: role,
             department: req.body.department || null,
             designation: req.body.designation || null,
             isActive: true,
-            isFirstLogin: true // Force first login flow
+            isFirstLogin: true
         };
 
-        if (user) {
-            // IF user exists, reset it for the new employee onboarding
-            await User.findByIdAndUpdate(user._id, userData);
-        } else {
-            user = await User.create(userData);
+        const newUser = new User(userData);
+        await newUser.save({ session });
+
+        // Audit log (outside session but part of flow)
+        await logAction(req.user?._id, 'Employee Created', 'Employees', { employeeId: employee.employeeId, email: employee.email, pan: employee.panNumber }, req);
+
+        // 5. Send Welcome Email
+        try {
+            await sendEmail({
+                to: email,
+                subject: `Welcome to ${process.env.COMPANY_NAME || 'Ravi Zoho HRMS'}!`,
+                template: 'welcomeEmployee',
+                data: {
+                    employeeName: `${firstName} ${lastName}`,
+                    companyName: process.env.COMPANY_NAME || 'Ravi Zoho HRMS',
+                    loginUrl: `${process.env.WEBSITE_URL}/login`,
+                    employeeId: employee.employeeId
+                }
+            });
+        } catch (emailErr) {
+            console.error('Email sending failed during employee creation:', emailErr.message);
+            // We don't roll back the whole transaction for email failures
         }
 
-        // Audit log
-        await logAction(req.user?._id, 'Employee Created', 'Employees', { employeeId: employee.employeeId, email: employee.email }, req);
-
-        // 3. Send Welcome Email
-        await sendEmail({
-            to: email,
-            subject: `Welcome to ${process.env.COMPANY_NAME || 'Ravi Zoho HRMS'}!`,
-            template: 'welcomeEmployee',
-            data: {
-                employeeName: `${firstName} ${lastName}`,
-                companyName: process.env.COMPANY_NAME || 'Ravi Zoho HRMS',
-                loginUrl: `${process.env.WEBSITE_URL}/login`,
-                employeeId: employee.employeeId
-            }
-        });
+        // 6. Commit Transaction
+        await session.commitTransaction();
+        session.endSession();
 
         res.status(201).json({ success: true, data: employee });
     } catch (error) {
+        // 7. Abort Transaction on failure
+        await session.abortTransaction();
+        session.endSession();
         next(error);
     }
 };
@@ -147,36 +192,78 @@ exports.createEmployee = async (req, res, next) => {
  * @route   PUT /api/employees/:id
  */
 exports.updateEmployee = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const { role, firstName, lastName, email } = req.body;
-        const employee = await Employee.findByIdAndUpdate(req.params.id, req.body, {
+        const { role, firstName, lastName, email, panNumber } = req.body;
+        
+        // 1. Validation for PAN if provided
+        if (panNumber) {
+            const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+            if (!panRegex.test(panNumber.toUpperCase())) {
+                return res.status(400).json({ success: false, message: 'Invalid PAN format. Example: ABCDE1234F' });
+            }
+
+            // Check if PAN exists in other records (Employee)
+            const panInEmployee = await Employee.findOne({ 
+                panNumber: panNumber.toUpperCase(), 
+                _id: { $ne: req.params.id } 
+            });
+            if (panInEmployee) {
+                return res.status(400).json({ success: false, message: 'PAN already exists in another employee record.' });
+            }
+
+            // Check if PAN exists in other records (User)
+            const panInUser = await User.findOne({ 
+                panNumber: panNumber.toUpperCase(), 
+                email: { $ne: email || (await Employee.findById(req.params.id))?.email } 
+            });
+            if (panInUser) {
+                return res.status(400).json({ success: false, message: 'PAN already exists in another user record.' });
+            }
+        }
+
+        const employee = await Employee.findByIdAndUpdate(req.params.id, {
+            ...req.body,
+            panNumber: panNumber ? panNumber.toUpperCase() : undefined
+        }, {
             new: true,
             runValidators: true,
+            session
         });
 
         if (!employee) {
+            await session.abortTransaction();
             return res.status(404).json({ success: false, message: 'Employee not found.' });
         }
 
         // Sync with User role/name/department if email matches
-        if (role || firstName || lastName || req.body.department || req.body.designation) {
+        if (role || firstName || lastName || req.body.department || req.body.designation || panNumber) {
             let updatePayload = {};
             if (role) updatePayload.role = role;
             if (firstName && lastName) updatePayload.name = `${firstName} ${lastName}`;
             if (req.body.department !== undefined) updatePayload.department = req.body.department;
             if (req.body.designation !== undefined) updatePayload.designation = req.body.designation;
+            if (panNumber) updatePayload.panNumber = panNumber.toUpperCase();
 
             await User.findOneAndUpdate(
                 { email: email || employee.email },
-                updatePayload
+                updatePayload,
+                { session }
             );
         }
 
         // Audit log
         await logAction(req.user?._id, 'Employee Updated', 'Employees', { id: employee._id, employeeId: employee.employeeId, email: employee.email }, req);
 
+        await session.commitTransaction();
+        session.endSession();
+
         res.status(200).json({ success: true, data: employee });
     } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
         next(error);
     }
 };

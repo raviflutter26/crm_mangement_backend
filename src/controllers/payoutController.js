@@ -1,6 +1,7 @@
 const RazorpayService = require('../services/razorpayService');
 const PayoutTransaction = require('../models/PayoutTransaction');
 const Payroll = require('../models/Payroll');
+const PayrollRun = require('../models/PayrollRun');
 const Employee = require('../models/Employee');
 const BankDetail = require('../models/BankDetail');
 const { sendEmail } = require('../services/emailService');
@@ -16,56 +17,86 @@ class PayoutController {
      */
     static async initiatePayout(req, res) {
         try {
-            const { payrollId } = req.body;
-            
-            const payroll = await Payroll.findById(payrollId);
-            if (!payroll) return res.status(404).json({ success: false, message: 'Payroll not found' });
-            
-            if (payroll.status !== 'approved') {
-                return res.status(400).json({ success: false, message: 'Only approved payrolls can be paid' });
-            }
+            const { payrollId, runId } = req.body;
+            let payrollToPay = [];
 
-            // Get all records for this payroll
-            // Assuming Payroll model has an array of records or we find them in individual PayrollRecords collection
-            // For this implementation, we'll fetch from our PayoutTransaction model which should have been initialized
-            const transactions = await PayoutTransaction.find({ payrollId, status: 'pending' });
+            if (runId) {
+                // Process the whole run
+                const run = await PayrollRun.findById(runId).populate('payrollRecords');
+                if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found' });
+                if (run.status !== 'approved') {
+                    return res.status(400).json({ success: false, message: 'Only approved payroll runs can be paid' });
+                }
+                
+                // Get individual payroll documents from the run
+                payrollToPay = await Payroll.find({ _id: { $in: run.payrollRecords }, paymentStatus: 'Pending' });
+                
+                if (payrollToPay.length === 0) {
+                    return res.status(400).json({ success: false, message: 'No pending payroll records found in this run' });
+                }
 
-            if (transactions.length === 0) {
-                return res.status(400).json({ success: false, message: 'No pending transactions found for this payroll' });
-            }
-
-            // Transition payroll to processing
-            payroll.status = 'processing';
-            await payroll.save();
-
-            // In a production app with 1000+ employees, we would trigger a BullMQ job here
-            // But for now, we process them via the service
-            const results = await RazorpayService.processBulkPayouts(payrollId, transactions);
-
-            // Update payroll status based on results
-            if (results.failed === 0) {
-                payroll.status = 'disbursed';
-            } else if (results.success > 0) {
-                payroll.status = 'partially_disbursed';
+                // Update run status to paid (or processing if using worker)
+                run.status = 'paid';
+                run.paidAt = new Date();
+                await run.save();
+            } else if (payrollId) {
+                // Process individual record
+                const individualPayroll = await Payroll.findById(payrollId);
+                if (!individualPayroll) return res.status(404).json({ success: false, message: 'Payroll not found' });
+                if (individualPayroll.paymentStatus === 'Paid') {
+                    return res.status(400).json({ success: false, message: 'Payroll already paid' });
+                }
+                payrollToPay = [individualPayroll];
             } else {
-                payroll.status = 'failed';
+                return res.status(400).json({ success: false, message: 'payrollId or runId required' });
             }
-            await payroll.save();
 
-            // Notify HR about payroll processing start
+            // For each payroll record, ensure a PayoutTransaction exists
+            for (const payroll of payrollToPay) {
+                let transaction = await PayoutTransaction.findOne({ payrollId: payroll._id });
+                if (!transaction) {
+                    transaction = await PayoutTransaction.create({
+                        payrollId: payroll._id,
+                        employeeId: payroll.employee,
+                        amount: payroll.netPay,
+                        status: 'pending'
+                    });
+                }
+            }
+
+            // Get pending transactions to process
+            const pendingTransactions = await PayoutTransaction.find({ 
+                payrollId: { $in: payrollToPay.map(p => p._id) }, 
+                status: 'pending' 
+            });
+
+            if (pendingTransactions.length === 0) {
+                return res.status(400).json({ success: false, message: 'All transactions for this payroll/run are already processed or failed' });
+            }
+
+            // Trigger RazorpayX Bulk process
+            const results = await RazorpayService.processBulkPayouts(runId || payrollId, pendingTransactions);
+
+            // Update individual payroll record statuses
+            await Payroll.updateMany(
+                { _id: { $in: payrollToPay.map(p => p._id) } },
+                { paymentStatus: 'Paid', paymentDate: new Date() }
+            );
+
+            // Notify HR
             await sendEmail({
                 to: process.env.HR_EMAIL || process.env.EMAIL_USER,
-                subject: `Payroll Processing Started - ${payrollId}`,
-                template: 'notification', // generic template
+                subject: runId ? `Payroll Run Disbursed - ${runId}` : `Individual Payroll Disbursed - ${payrollId}`,
+                template: 'notification',
                 data: {
-                    title: 'Payroll Processing Started',
-                    message: `Disbursement flow for payroll ${payrollId} has been initiated. Success: ${results.success}, Failed: ${results.failed}`
+                    title: 'Payroll Disbursement Initiated',
+                    message: `RazorpayX disbursement flow has been triggered. Success: ${results.success}, Failed: ${results.failed}`
                 }
             });
 
             return res.json({
                 success: true,
-                message: `Payout initiated. Success: ${results.success}, Failed: ${results.failed}`,
+                message: `Payout initiated for ${pendingTransactions.length} records.`,
                 results
             });
         } catch (error) {

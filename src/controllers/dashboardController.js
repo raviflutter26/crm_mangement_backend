@@ -2,6 +2,7 @@ const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Payroll = require('../models/Payroll');
+const JobPosting = require('../models/JobPosting');
 
 /**
  * @desc    Get dashboard statistics
@@ -116,6 +117,8 @@ exports.getDashboard = async (req, res, next) => {
 
         const totalEmployees = await Employee.countDocuments(employeeQuery);
         const activeEmployees = await Employee.countDocuments({ ...employeeQuery, status: 'Active' });
+        
+        console.log(`📊 Dashboard Stats: Total=${totalEmployees}, Active=${activeEmployees}`);
         const newEmployeesThisMonth = await Employee.countDocuments({
             ...employeeQuery,
             createdAt: { $gte: new Date(`${currentYear}-${currentMonth}-01`) },
@@ -150,11 +153,23 @@ exports.getDashboard = async (req, res, next) => {
         // Absent = Total Active - Checked In - Approved Leave Today
         const absentToday = Math.max(0, activeEmployees - checkedInToday - onLeaveToday);
 
-        // Recent activities (Leaves)
+        // Recent activities (Leaves & Hiring)
         const recentLeaves = await Leave.find(leaveQuery)
             .populate('employee', 'firstName lastName')
             .sort('-createdAt')
             .limit(5);
+        
+        const leaveApprovals = await Leave.find({ ...leaveQuery, status: 'Pending' })
+            .populate('employee', 'firstName lastName')
+            .sort('createdAt')
+            .limit(5);
+
+        const recentHires = await Employee.find({ ...employeeQuery, status: 'Active' })
+            .sort('-createdAt')
+            .limit(5)
+            .select('firstName lastName designation department status createdAt');
+            
+        const openPositions = await JobPosting.countDocuments({ status: 'Open' });
 
         // Payroll stats
         const payrollSummary = await Payroll.aggregate([
@@ -215,7 +230,10 @@ exports.getDashboard = async (req, res, next) => {
                 departmentDistribution,
                 attendanceTrends,
                 payrollTrends,
-                recentLeaves
+                recentLeaves,
+                leaveApprovals,
+                recentHires,
+                openPositions
             },
         });
     } catch (error) {

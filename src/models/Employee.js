@@ -82,7 +82,14 @@ const employeeSchema = new mongoose.Schema(
             default: 'Full-time',
         },
         // Statutory compliance fields
-        pan: { type: String, default: null },
+        panNumber: { 
+            type: String, 
+            default: null,
+            unique: true,
+            sparse: true,
+            uppercase: true,
+            match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Please provide a valid PAN number']
+        },
         aadhaar: { type: String, default: null },
         passportNumber: { type: String, default: null },
         drivingLicense: { type: String, default: null },

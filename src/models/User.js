@@ -41,6 +41,14 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        panNumber: {
+            type: String,
+            default: null,
+            sparse: true,
+            unique: true,
+            uppercase: true,
+            match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Please provide a valid PAN number']
+        },
         avatar: {
             type: String,
             default: null,
@@ -74,6 +82,8 @@ const userSchema = new mongoose.Schema(
         toObject: { virtuals: true },
     }
 );
+
+userSchema.index({ email: 1 }, { unique: true });
 
 // Hash password before saving
 userSchema.pre('save', async function () {
