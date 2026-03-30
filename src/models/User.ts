@@ -172,26 +172,20 @@ UserSchema.index({ organizationId: 1, departmentId: 1 });
 UserSchema.index({ role: 1 });
 
 // Ensure Super Admin has no organization
-UserSchema.pre<IUser>('save', function(next) {
+UserSchema.pre('save', function(this: IUser) {
     if (this.role === 'superadmin') {
         this.organizationId = null;
     } else if (!this.organizationId) {
         // All other roles MUST have an organization
-        return next(new Error('Organization ID is required for non-superadmin users'));
+        throw new Error('Organization ID is required for non-superadmin users');
     }
-    next();
 });
 
 // Password hashing pre-save hook
-UserSchema.pre<IUser>('save', async function(next) {
-    if (!this.isModified('password')) return next();
-    try {
-        const salt = await bcrypt.genSalt(12);
-        this.password = await bcrypt.hash(this.password as string, salt);
-        next();
-    } catch (err: any) {
-        next(err);
-    }
+UserSchema.pre('save', async function(this: IUser) {
+    if (!this.isModified('password')) return;
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password as string, salt);
 });
 
 export default mongoose.model<IUser>('User', UserSchema);

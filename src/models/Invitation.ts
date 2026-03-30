@@ -7,7 +7,7 @@ export interface IInvitation extends Document {
     departmentId?: mongoose.Types.ObjectId;
     token: string;
     expiresAt: Date;
-    status: 'pending' | 'accepted' | 'expired'];
+    status: 'pending' | 'accepted' | 'expired';
     invitedBy: mongoose.Types.ObjectId;
     createdAt: Date;
 }
