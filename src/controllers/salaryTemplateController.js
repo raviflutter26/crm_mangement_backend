@@ -1,12 +1,24 @@
 const SalaryTemplate = require('../models/SalaryTemplate');
 
+// Self-healing index cleanup
+SalaryTemplate.collection.dropIndex('name_1').catch(() => {});
+
 /**
  * @desc    Get all salary templates
  * @route   GET /api/salary-templates
  */
 exports.getTemplates = async (req, res, next) => {
     try {
-        const templates = await SalaryTemplate.find({ isActive: true });
+        const filter = { isActive: true };
+        if (req.query.organizationId) {
+            filter.$or = [
+                { organizationId: req.query.organizationId },
+                { organizationId: { $exists: false } },
+                { organizationId: null }
+            ];
+        }
+        
+        const templates = await SalaryTemplate.find(filter);
         res.status(200).json({ success: true, count: templates.length, data: templates });
     } catch (error) {
         next(error);
@@ -19,7 +31,8 @@ exports.getTemplates = async (req, res, next) => {
  */
 exports.saveTemplate = async (req, res, next) => {
     try {
-        const { name, basicPercent, hraPercent, daPercent, specialAllowancePercent, isDefault, department, role } = req.body;
+        const { name, basicPercent, hraPercent, daPercent, specialAllowancePercent, isDefault, department, role, organizationId } = req.body;
+        const orgId = organizationId || req.user?.organizationId;
 
         if (isDefault) {
             // Unset other defaults if this one is marked as default
@@ -27,8 +40,8 @@ exports.saveTemplate = async (req, res, next) => {
         }
 
         const template = await SalaryTemplate.findOneAndUpdate(
-            { name },
-            { name, basicPercent, hraPercent, daPercent, specialAllowancePercent, isDefault, department, role },
+            { name, organizationId: orgId },
+            { name, basicPercent, hraPercent, daPercent, specialAllowancePercent, isDefault, department, role, organizationId: orgId },
             { new: true, upsert: true, runValidators: true }
         );
 

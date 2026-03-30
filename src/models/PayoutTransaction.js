@@ -54,7 +54,7 @@ const payoutTransactionSchema = new mongoose.Schema({
 });
 
 // Indexes for fast lookup from Webhooks
-payoutTransactionSchema.index({ razorpayPayoutId: 1 });
+// payoutTransactionSchema.index({ razorpayPayoutId: 1 }); // Redundant, razorpayPayoutId has index: true above
 payoutTransactionSchema.index({ payrollId: 1, employeeId: 1 });
 
 module.exports = mongoose.model('PayoutTransaction', payoutTransactionSchema);

@@ -11,7 +11,11 @@ router.use(authenticate);
 // Organization Management
 router.post('/', authorize('Admin'), organizationController.createOrganization);
 router.get('/', organizationController.getOrganizations);
+router.get('/:id', organizationController.getOrganizationById);
 router.put('/:id', authorize('Admin'), organizationController.updateOrganization);
+router.patch('/:id/status', authorize('Admin'), organizationController.updateOrganizationStatus);
+router.delete('/:id', authorize('Admin'), organizationController.deleteOrganization);
+router.post('/:id/impersonate', authorize('Admin'), organizationController.impersonateOrganization);
 
 // Sub-resources (Designations, Branches, Holidays)
 router.get('/designations', organizationController.getDesignations);

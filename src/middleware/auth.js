@@ -55,6 +55,10 @@ const authorize = (...roles) => {
         const allowedRolesLower = roles.map(r => String(r).toLowerCase());
         const userRoleLower = String(req.user.role).toLowerCase();
 
+        if (userRoleLower === 'superadmin') {
+            return next();
+        }
+
         if (!allowedRolesLower.includes(userRoleLower)) {
             return res.status(403).json({
                 success: false,
@@ -65,4 +69,17 @@ const authorize = (...roles) => {
     };
 };
 
-module.exports = { authenticate, authorize };
+/**
+ * Specifically block SuperAdmin from employee-specific routes.
+ */
+const denySuperAdmin = (req, res, next) => {
+    if (req.user && String(req.user.role).toLowerCase() === 'superadmin') {
+        return res.status(403).json({
+            success: false,
+            message: 'Super Admin cannot access employee-specific modules (Payroll, Attendance, Leaves)'
+        });
+    }
+    next();
+};
+
+module.exports = { authenticate, protect: authenticate, authorize, denySuperAdmin };

@@ -51,8 +51,8 @@ const employeeSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ['Admin', 'HR', 'Manager', 'Employee'],
-            default: 'Employee',
+            enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'Admin', 'HR', 'Manager', 'Employee'],
+            default: 'employee',
         },
         reportingManager: {
             type: mongoose.Schema.Types.ObjectId,
@@ -88,39 +88,39 @@ const employeeSchema = new mongoose.Schema(
         },
         statutory: {
             pf: {
-                epfEnabled: { type: Boolean, default: true },
-                uanNumber: { type: String, default: null },
-                epfNumber: { type: String, default: null },
+                enabled: { type: Boolean, default: true },
+                uanNumber: { type: String, default: null }, // 12 digits
+                pfNumber: { type: String, default: null },
                 pfJoiningDate: { type: Date, default: null },
                 contributionPreferences: {
-                    employerPFContribution: { type: Boolean, default: true },
-                    edliContribution: { type: Boolean, default: true },
-                    adminCharges: { type: Boolean, default: true }
+                    includeEmployerPF: { type: Boolean, default: true },
+                    includeEDLI: { type: Boolean, default: true },
+                    includeAdminCharges: { type: Boolean, default: true }
                 },
-                allowEmployeeLevelOverride: { type: Boolean, default: false },
+                allowOverride: { type: Boolean, default: false },
                 proRateRestrictedPFWage: { type: Boolean, default: true },
-                considerSalaryComponentsOnLOP: { type: Boolean, default: true },
-                eligibleForABRYScheme: { type: Boolean, default: false }
+                considerComponentsOnLOP: { type: Boolean, default: true },
+                eligibleForABRY: { type: Boolean, default: false }
             },
             esi: {
-                esiEnabled: { type: Boolean, default: true },
+                enabled: { type: Boolean, default: true },
                 esiNumber: { type: String, default: null },
                 esiJoiningDate: { type: Date, default: null },
-                esiDeductionCycle: { type: String, default: 'Monthly' },
-                esiSalaryLimit: { type: Number, default: 21000 }
+                deductionCycle: { type: String, default: 'Monthly' },
+                salaryLimit: { type: Number, default: 21000 }
             },
             pt: {
-                ptEnabled: { type: Boolean, default: true },
+                enabled: { type: Boolean, default: true },
                 ptRegistrationNumber: { type: String, default: null },
-                ptDeductionCycle: { type: String, default: 'Half Yearly' }
+                deductionCycle: { type: String, default: 'Half Yearly' }
             },
             lwf: {
-                lwfEnabled: { type: Boolean, default: true },
+                enabled: { type: Boolean, default: true },
                 lwfAccountNumber: { type: String, default: null },
-                lwfDeductionCycle: { type: String, default: 'Yearly' }
+                deductionCycle: { type: String, default: 'Yearly' }
             },
             statutoryBonus: {
-                statutoryBonusEnabled: { type: Boolean, default: true },
+                enabled: { type: Boolean, default: true },
                 bonusAmount: { type: Number, default: 0 }
             }
         },

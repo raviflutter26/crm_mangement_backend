@@ -103,7 +103,16 @@ class PdfService {
             totals: {
                 gross: payrollData.totalEarnings,
                 deductions: payrollData.totalDeductions,
-                net: payrollData.netPay
+                net: Math.round(payrollData.netPay)
+            },
+            employerContributions: {
+                pf: Math.round(payrollData.employerContributions.pf),
+                eps: Math.round(payrollData.employerContributions.eps),
+                epf: Math.round(payrollData.employerContributions.epf),
+                edli: Math.round(payrollData.employerContributions.edli),
+                adminCharges: Math.round(payrollData.employerContributions.adminCharges),
+                esi: Math.round(payrollData.employerContributions.esi),
+                lwf: Math.round(payrollData.employerContributions.lwf)
             }
         };
 

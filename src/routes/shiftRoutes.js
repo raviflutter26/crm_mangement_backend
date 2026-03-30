@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const shiftController = require('../controllers/shiftController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, denySuperAdmin } = require('../middleware/auth');
 
-router.use(authenticate);
+router.use(authenticate, denySuperAdmin);
 
 router.post('/', authorize('Admin', 'HR'), shiftController.createShift);
 router.get('/', shiftController.getShifts);

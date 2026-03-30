@@ -19,7 +19,9 @@ const generateToken = (id) => {
  */
 exports.register = async (req, res, next) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, firstName, lastName, email, password, role } = req.body;
+        const fName = firstName || (name ? name.split(' ')[0] : '');
+        const lName = lastName || (name ? name.split(' ').slice(1).join(' ') : '');
 
         // Check if user already exists
         let user = await User.findOne({ email });
@@ -49,7 +51,7 @@ exports.register = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Email already registered.' });
         }
 
-        user = await User.create({ name, email, password, role });
+        user = await User.create({ firstName: fName, lastName: lName, email, password, role });
 
         const token = generateToken(user._id);
 
@@ -113,6 +115,8 @@ exports.login = async (req, res, next) => {
                 data: {
                     user: {
                         id: user._id,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
                         name: user.name,
                         email: user.email,
                         role: user.role,
@@ -155,6 +159,8 @@ exports.login = async (req, res, next) => {
             data: {
                 user: {
                     id: user._id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     name: user.name,
                     email: user.email,
                     role: user.role,
@@ -389,6 +395,8 @@ exports.resetPassword = async (req, res, next) => {
             data: {
                 user: {
                     id: user._id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     name: user.name,
                     email: user.email,
                     role: user.role,
@@ -433,6 +441,8 @@ exports.createPassword = async (req, res, next) => {
             data: {
                 user: {
                     id: user._id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     name: user.name,
                     email: user.email,
                     role: user.role,

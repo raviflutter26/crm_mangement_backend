@@ -94,7 +94,15 @@ exports.getAttendance = async (req, res, next) => {
  */
 exports.checkIn = async (req, res, next) => {
     try {
-        const { employeeId, source, latitude, longitude, deviceId, ipAddress } = req.body;
+        let { employeeId, source, latitude, longitude, deviceId, ipAddress } = req.body;
+        
+        // Security & Consistency Fix: Always resolve true Employee._id if logged in as Employee
+        if (req.user && req.user.role === 'Employee') {
+            const Employee = require('../models/Employee'); // Ensure model is loaded
+            const emp = await Employee.findOne({ email: req.user.email });
+            if (emp) employeeId = emp._id;
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
@@ -233,13 +241,22 @@ exports.checkIn = async (req, res, next) => {
  */
 exports.checkOut = async (req, res, next) => {
     try {
-        const { employeeId, latitude, longitude } = req.body;
+        let { employeeId, latitude, longitude } = req.body;
+        
+        // Security & Consistency Fix: Always resolve true Employee._id if logged in as Employee
+        if (req.user && req.user.role === 'Employee') {
+            const Employee = require('../models/Employee');
+            const emp = await Employee.findOne({ email: req.user.email });
+            if (emp) employeeId = emp._id;
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
         // Fetch employee to get assigned shift
+        const Employee = require('../models/Employee');
         const employee = await Employee.findById(employeeId).populate('shift').populate('organizationId');
         const shift = employee?.shift;
         const orgSettings = employee?.organizationId?.attendanceSettings;
@@ -323,7 +340,8 @@ exports.checkOut = async (req, res, next) => {
         }
 
         // Check for Early Leave for stats
-        const [endHour, endMin] = config.endTime.split(':').map(Number);
+        const endTimeStr = shift?.endTime || orgSettings?.defaultEndTime || '18:00';
+        const [endHour, endMin] = endTimeStr.split(':').map(Number);
         const shiftEnd = new Date(today);
         shiftEnd.setHours(endHour, endMin, 0, 0);
 

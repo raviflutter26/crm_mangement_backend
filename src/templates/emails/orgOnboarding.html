@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333; background-color: #f8fafc; }
+        .container { max-width: 650px; margin: 20px auto; padding: 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .header { background: #0f172a; color: #fff; padding: 40px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; }
+        .content { padding: 40px; }
+        .welcome-badge { display: inline-block; padding: 4px 12px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 600; border-radius: 9999px; border: 1px solid #ffedd5; margin-bottom: 16px; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; }
+        .card-title { font-size: 13px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; display: block; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; }
+        .info-label { font-size: 13px; color: #64748b; }
+        .info-value { font-size: 13px; font-weight: 600; color: #0f172a; }
+        .button { display: inline-block; padding: 14px 28px; background: #FF7A00; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; margin-top: 8px; text-align: center; }
+        .footer { text-align: center; font-size: 12px; color: #94a3b8; padding: 20px; border-top: 1px solid #f1f5f9; }
+        .highlight { color: #FF7A00; font-weight: 700; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="font-size: 32px; margin-bottom: 12px;">🚀</div>
+            <h1>HRMS Cluster Initialized</h1>
+            <p style="color: #94a3b8; font-size: 14px; margin: 8px 0 0;">Infrastructure validation complete. Your environment is ready.</p>
+        </div>
+        <div class="content">
+            <div class="welcome-badge">ONBOARDING SUCCESSFUL</div>
+            <p>Hello <span class="highlight">{{adminName}}</span>,</p>
+            <p>Congratulations! Your organization <span class="highlight">{{orgName}}</span> has been successfully provisioned on the Ravi Zoho HRMS platform.</p>
+            
+            <div class="card">
+                <span class="card-title">Root Credentials</span>
+                <div class="info-row">
+                    <span class="info-label">Portal URL</span>
+                    <span class="info-value">{{portalUrl}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Admin Email</span>
+                    <span class="info-value">{{adminEmail}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Initial Password</span>
+                    <span class="info-value">{{tempPassword}}</span>
+                </div>
+            </div>
+
+            <p style="font-size: 14px; color: #64748b;">For security reasons, please change your password immediately after your first login.</p>
+            
+            <div style="text-align: center;">
+                <a href="{{loginUrl}}" class="button">Access Admin Terminal</a>
+            </div>
+            
+            <p style="margin-top: 32px;">Infrastructure Details: <br>
+            <span style="font-size: 13px; color: #64748b;">
+                Industry: {{industry}} <br>
+                Service Plan: {{planType}} <br>
+                Node Slug: {{slug}}
+            </span></p>
+        </div>
+        <div class="footer">
+            &copy; {{year}} {{companyName}}. Built by Advanced Agentic Coding.<br>
+            This is an automated system dispatch.
+        </div>
+    </div>
+</body>
+</html>

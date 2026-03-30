@@ -32,8 +32,18 @@ const payrollSchema = new mongoose.Schema(
             esi: { type: Number, default: 0 },
             tax: { type: Number, default: 0 },
             professionalTax: { type: Number, default: 0 },
+            lwf: { type: Number, default: 0 },
             loanDeduction: { type: Number, default: 0 },
             otherDeductions: { type: Number, default: 0 },
+        },
+        employerContributions: {
+            pf: { type: Number, default: 0 },
+            eps: { type: Number, default: 0 },
+            epf: { type: Number, default: 0 },
+            edli: { type: Number, default: 0 },
+            adminCharges: { type: Number, default: 0 },
+            esi: { type: Number, default: 0 },
+            lwf: { type: Number, default: 0 },
         },
         totalEarnings: {
             type: Number,

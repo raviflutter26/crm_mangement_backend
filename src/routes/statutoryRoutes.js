@@ -16,7 +16,13 @@ router.get('/employee/:employeeId', authenticate, statutoryController.getEmploye
 router.put('/employee/:employeeId', authenticate, authorize('admin', 'hr'), statutoryController.updateEmployeeStatutory);
 
 // Calculations & Slabs
-router.post('/epf/calculate', authenticate, statutoryController.previewEPFCalculation);
+// EPF Calculation Preview
+router.post('/epf/calculate', (req, res) => {
+    const { pfWage, config } = req.body;
+    const { calculateEPF } = require('../utils/statutoryCalc');
+    const result = calculateEPF(pfWage || 0, config || {});
+    res.json({ success: true, data: result });
+});
 router.get('/pt/slabs/:state', authenticate, statutoryController.getPTSlabs);
 
 module.exports = router;

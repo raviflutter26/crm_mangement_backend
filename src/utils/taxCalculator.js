@@ -19,69 +19,75 @@ const calculateSalaryBreakdown = (employee, config, workingDays = 26, presentDay
     const ratio = workingDays > 0 ? (presentDays || 0) / workingDays : 1;
 
     // 1. Pro-rate Earnings
-    const basic = Math.round((salary.basic || 0) * ratio);
+    let basic = Math.round((salary.basic || 0) * ratio);
     const hra = Math.round((salary.hra || 0) * ratio);
     const da = Math.round((salary.da || 0) * ratio);
     const specialAllowance = Math.round((salary.specialAllowance || 0) * ratio);
+    
+    // Pro-rate PF wage if config says so
+    let pfWage = basic;
+    const empStat = employee.statutory || {};
+    if (empStat.pf?.proRateRestrictedPFWage && presentDays < workingDays) {
+        // Note: basic is already pro-rated above.
+    }
+
     const grossEarnings = basic + hra + da + specialAllowance;
 
-    const empStat = employee.statutory || {};
-
     // 2. EPF Calculation
-    const epfResult = calculateEPF(basic, {
+    const epfResult = calculateEPF(pfWage, {
         ...config.epf,
         ...empStat.pf,
-        epfEnabled: empStat.pf?.epfEnabled ?? config.epf.epfEnabled
+        epfEnabled: empStat.pf?.enabled ?? config.epf.epfEnabled
     });
 
     // 3. ESI Calculation
     const esiResult = calculateESI(grossEarnings, {
         ...config.esi,
         ...empStat.esi,
-        esiEnabled: empStat.esi?.esiEnabled ?? config.esi.esiEnabled
+        esiEnabled: empStat.esi?.enabled ?? config.esi.esiEnabled
     });
 
     // 4. Professional Tax
     const ptAmount = calculatePT(grossEarnings, config.professionalTax.ptState, {
         ...config.professionalTax,
         ...empStat.pt,
-        ptEnabled: empStat.pt?.ptEnabled ?? config.professionalTax.ptEnabled
+        ptEnabled: empStat.pt?.enabled ?? config.professionalTax.ptEnabled
     });
 
     // 5. Labour Welfare Fund
     const lwfResult = calculateLWF({
         ...config.labourWelfareFund,
         ...empStat.lwf,
-        lwfEnabled: empStat.lwf?.lwfEnabled ?? config.labourWelfareFund.lwfEnabled
+        lwfEnabled: empStat.lwf?.enabled ?? config.labourWelfareFund.lwfEnabled
     }, new Date().getMonth() + 1);
 
     // 6. Statutory Bonus
     const bonusAmount = calculateStatutoryBonus(basic, {
         ...config.statutoryBonus,
         ...empStat.statutoryBonus,
-        statutoryBonusEnabled: empStat.statutoryBonus?.statutoryBonusEnabled ?? config.statutoryBonus.statutoryBonusEnabled
+        statutoryBonusEnabled: empStat.statutoryBonus?.enabled ?? config.statutoryBonus.statutoryBonusEnabled
     });
 
     // 7. Income Tax (TDS)
     const annualGross = grossEarnings * 12;
-    const annualPF = epfResult.totalEmployee * 12;
+    const annualPF = epfResult.employeeContribution.epf * 12;
     const tds = calculateTDS(annualGross - annualPF, employee.taxRegime || 'new', {});
 
-    const totalDeductions = epfResult.totalEmployee + esiResult.employeeESI + ptAmount + lwfResult.employeeLWF + tds;
+    const totalDeductions = epfResult.employeeContribution.epf + esiResult.employeeESI + ptAmount + lwfResult.employeeLWF + tds;
     const netPay = grossEarnings - totalDeductions;
 
     return {
         earnings: { basic, hra, da, specialAllowance, bonus: bonusAmount },
         grossEarnings,
         deductions: {
-            pf: epfResult.totalEmployee,
+            pf: epfResult.employeeContribution.epf,
             esi: esiResult.employeeESI,
             professionalTax: ptAmount,
             lwf: lwfResult.employeeLWF,
             tds: tds,
         },
         employerContributions: {
-            pf: epfResult.totalEmployer, // Aggregated in statutoryCalc
+            pf: epfResult.employerContribution.eps + epfResult.employerContribution.epf + epfResult.employerContribution.edli + epfResult.employerContribution.adminCharges,
             eps: epfResult.employerContribution.eps,
             epf: epfResult.employerContribution.epf,
             edli: epfResult.employerContribution.edli,

@@ -3,9 +3,14 @@ const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
     {
-        name: {
+        firstName: {
             type: String,
-            required: [true, 'Name is required'],
+            required: [true, 'First name is required'],
+            trim: true,
+        },
+        lastName: {
+            type: String,
+            required: [true, 'Last name is required'],
             trim: true,
         },
         email: {
@@ -22,8 +27,13 @@ const userSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ['Admin', 'HR', 'Manager', 'Employee'],
-            default: 'Employee',
+            enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'Admin', 'HR', 'Manager', 'Employee'],
+            default: 'employee',
+        },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            default: null
         },
         zohoEmployeeId: {
             type: String,
@@ -43,7 +53,6 @@ const userSchema = new mongoose.Schema(
         },
         panNumber: {
             type: String,
-            default: null,
             sparse: true,
             unique: true,
             uppercase: true,
@@ -83,9 +92,10 @@ const userSchema = new mongoose.Schema(
     }
 );
 
-userSchema.index({ email: 1 }, { unique: true });
+userSchema.virtual('name').get(function () {
+    return `${this.firstName} ${this.lastName}`;
+});
 
-// Hash password before saving
 userSchema.pre('save', async function () {
     if (!this.password || !this.isModified('password')) return;
     this.password = await bcrypt.hash(this.password, 12);

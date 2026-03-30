@@ -31,6 +31,10 @@ const attendanceConfigRoutes = require('./attendanceConfigRoutes');
 const locationRoutes = require('./locationRoutes');
 const shiftRoutes = require('./shiftRoutes');
 const salaryComponentRoutes = require('./salaryComponentRoutes');
+const invitationRoutes = require('./invitationRoutes');
+const systemHealthRoutes = require('./systemHealthRoutes');
+const masterRoutes = require('./masterRoutes');
+const superadminRoutes = require('./superadminRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -66,6 +70,10 @@ router.use('/attendance-config', attendanceConfigRoutes);
 router.use('/locations', locationRoutes);
 router.use('/shifts', shiftRoutes);
 router.use('/salary-components', salaryComponentRoutes);
+router.use('/invitations', invitationRoutes);
+router.use('/master', masterRoutes);
+router.use('/superadmin', superadminRoutes);
+router.use('/system', systemHealthRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

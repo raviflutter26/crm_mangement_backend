@@ -102,9 +102,12 @@ class PayrollAutomationService {
                     professionalTax: breakdown.deductions.professionalTax,
                     lwf: breakdown.deductions.lwf
                 },
-                totalEarnings: breakdown.grossEarnings + breakdown.bonus,
+                employerContributions: {
+                    ...breakdown.employerContributions
+                },
+                totalEarnings: breakdown.grossEarnings + (breakdown.bonus || 0),
                 totalDeductions: breakdown.totalDeductions,
-                netPay: (breakdown.grossEarnings + breakdown.bonus) - breakdown.totalDeductions,
+                netPay: (breakdown.grossEarnings + (breakdown.bonus || 0)) - breakdown.totalDeductions,
                 workingDays,
                 presentDays,
                 paymentStatus: 'Pending'

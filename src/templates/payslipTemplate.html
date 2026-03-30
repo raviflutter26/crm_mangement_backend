@@ -4,43 +4,45 @@
     <meta charset="utf-8">
     <title>Payslip - {{payroll.month}} {{payroll.year}}</title>
     <style>
-        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 20px; font-size: 14px; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #3498db; padding-bottom: 20px; margin-bottom: 20px; }
-        .company-info h1 { margin: 0; color: #2c3e50; font-size: 24px; }
-        .company-info p { margin: 5px 0 0; color: #7f8c8d; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; margin: 0; padding: 20px; font-size: 13px; line-height: 1.4; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0084FF; padding-bottom: 15px; margin-bottom: 20px; }
+        .company-info h1 { margin: 0; color: #1E293B; font-size: 22px; }
+        .company-info p { margin: 3px 0 0; color: #64748B; font-size: 11px; }
         .payslip-title { text-align: right; }
-        .payslip-title h2 { margin: 0; color: #3498db; }
-        .payslip-title p { margin: 5px 0 0; font-weight: bold; }
+        .payslip-title h2 { margin: 0; color: #0084FF; font-size: 20px; }
+        
+        .details-container { display: flex; gap: 20px; margin-bottom: 20px; }
+        .details-box { flex: 1; background: #F8FAFC; padding: 12px; border-radius: 6px; border: 1px solid #E2E8F0; }
+        .detail-row { display: flex; margin-bottom: 5px; }
+        .detail-label { width: 100px; color: #64748B; font-weight: 600; font-size: 11px; }
+        .detail-value { font-weight: 600; color: #1E293B; }
 
-        .employee-details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 30px; }
-        .detail-row { display: flex; margin-bottom: 8px; }
-        .detail-label { width: 150px; color: #7f8c8d; font-weight: bold; }
-        .detail-value { font-weight: 500; color: #2c3e50; }
+        .attendance-bar { display: flex; justify-content: space-around; background: #F1F5F9; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
+        .att-item { text-align: center; }
+        .att-label { font-size: 10px; color: #64748B; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
+        .att-value { font-size: 14px; font-weight: 700; color: #1E293B; }
 
-        .attendance-summary { background: #ecf0f1; padding: 10px 20px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: space-between; }
-        .attendance-item { text-align: center; }
-        .attendance-label { color: #7f8c8d; font-size: 12px; display: block; }
-        .attendance-value { font-size: 16px; font-weight: bold; color: #2c3e50; }
+        .salary-container { display: flex; gap: 20px; margin-bottom: 20px; }
+        .salary-box { flex: 1; }
+        .table { width: 100%; border-collapse: collapse; }
+        .table th { text-align: left; background: #0084FF; color: white; padding: 8px 12px; font-size: 12px; }
+        .table td { padding: 8px 12px; border-bottom: 1px solid #E2E8F0; }
+        .text-right { text-align: right; }
+        .section-header { font-weight: 700; color: #1E293B; padding: 10px 0; border-bottom: 2px solid #E2E8F0; margin-bottom: 10px; }
 
-        .salary-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        .salary-table th { background: #3498db; color: white; text-align: left; padding: 12px 15px; }
-        .salary-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; }
-        .salary-table tr:nth-child(even) { background: #fbfcfc; }
-        .salary-table .section-title { font-weight: bold; background: #f4f7f6; color: #2c3e50; }
-        .amount { text-align: right; font-family: 'Courier New', Courier, monospace; }
+        .employer-section { background: #F0F9FF; border: 1px solid #BAE6FD; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
+        .employer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 8px; }
+        .emp-contrib-item { font-size: 10px; color: #0369A1; }
 
-        .summary-box { float: right; width: 300px; background: #2c3e50; color: white; padding: 20px; border-radius: 8px; }
-        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .summary-row.total { border-top: 1px solid #5d6d7e; padding-top: 10px; margin-top: 10px; font-size: 18px; font-weight: bold; }
+        .summary-footer { display: flex; justify-content: flex-end; }
+        .summary-total-box { width: 250px; background: #1E293B; color: white; padding: 15px; border-radius: 6px; }
+        .summary-line { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+        .net-pay { font-size: 18px; font-weight: 800; border-top: 1px solid #334155; padding-top: 8px; margin-top: 8px; color: #38BDF8; }
 
-        .footer { margin-top: 250px; border-top: 1px solid #ecf0f1; padding-top: 20px; font-size: 12px; color: #95a5a6; text-align: center; }
-        .footer p { margin: 5px 0; }
-        .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(52, 152, 219, 0.05); pointer-events: none; white-space: nowrap; font-weight: bold; }
+        .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 15px; }
     </style>
 </head>
 <body>
-    <div class="watermark">SOLAR PAYROLL</div>
-
     <div class="header">
         <div class="company-info">
             <h1>{{company.name}}</h1>
@@ -48,65 +50,81 @@
         </div>
         <div class="payslip-title">
             <h2>PAYSLIP</h2>
-            <p>{{payroll.month}} {{payroll.year}}</p>
+            <p style="font-weight: 700; margin-top: 5px;">{{payroll.month}} {{payroll.year}}</p>
         </div>
     </div>
 
-    <div class="employee-details">
-        <div>
-            <div class="detail-row"><span class="detail-label">Employee Name:</span><span class="detail-value">{{employee.name}}</span></div>
-            <div class="detail-row"><span class="detail-label">Employee ID:</span><span class="detail-value">{{employee.id}}</span></div>
-            <div class="detail-row"><span class="detail-label">Department:</span><span class="detail-value">{{employee.department}}</span></div>
-            <div class="detail-row"><span class="detail-label">Designation:</span><span class="detail-value">{{employee.designation}}</span></div>
+    <div class="details-container">
+        <div class="details-box">
+            <div class="detail-row"><span class="detail-label">Employee:</span> <span class="detail-value">{{employee.name}}</span></div>
+            <div class="detail-row"><span class="detail-label">Employee ID:</span> <span class="detail-value">{{employee.id}}</span></div>
+            <div class="detail-row"><span class="detail-label">Designation:</span> <span class="detail-value">{{employee.designation}}</span></div>
         </div>
-        <div>
-            <div class="detail-row"><span class="detail-label">PAN Number:</span><span class="detail-value">{{employee.pan}}</span></div>
-            <div class="detail-row"><span class="detail-label">Bank A/C:</span><span class="detail-value">{{employee.bankAccount}}</span></div>
-            <div class="detail-row"><span class="detail-label">IFSC Code:</span><span class="detail-value">{{employee.ifsc}}</span></div>
-            <div class="detail-row"><span class="detail-label">Date of Joining:</span><span class="detail-value">{{employee.joiningDate}}</span></div>
+        <div class="details-box">
+            <div class="detail-row"><span class="detail-label">PAN:</span> <span class="detail-value">{{employee.pan}}</span></div>
+            <div class="detail-row"><span class="detail-label">Bank A/C:</span> <span class="detail-value">{{employee.bankAccount}}</span></div>
+            <div class="detail-row"><span class="detail-label">IFSC:</span> <span class="detail-value">{{employee.ifsc}}</span></div>
         </div>
     </div>
 
-    <div class="attendance-summary">
-        <div class="attendance-item"><span class="attendance-label">Total Days</span><span class="attendance-value">{{payroll.workingDays}}</span></div>
-        <div class="attendance-item"><span class="attendance-label">Present Days</span><span class="attendance-value">{{payroll.presentDays}}</span></div>
-        <div class="attendance-item"><span class="attendance-label">Leave Days</span><span class="attendance-value">{{payroll.leaveDays}}</span></div>
+    <div class="attendance-bar">
+        <div class="att-item"><span class="att-label">Total Days</span> <span class="att-value">{{payroll.workingDays}}</span></div>
+        <div class="att-item"><span class="att-label">Present</span> <span class="att-value">{{payroll.presentDays}}</span></div>
+        <div class="att-item"><span class="att-label">Leaves</span> <span class="att-value">{{payroll.leaveDays}}</span></div>
     </div>
 
-    <table class="salary-table">
-        <thead>
-            <tr>
-                <th>Description</th>
-                <th class="amount">Amount (INR)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td colspan="2" class="section-title">EARNINGS</td></tr>
-            {{#each earnings}}
-            <tr>
-                <td>{{this.label}}</td>
-                <td class="amount">₹{{this.amount}}</td>
-            </tr>
-            {{/each}}
-            <tr><td colspan="2" class="section-title">DEDUCTIONS</td></tr>
-            {{#each deductions}}
-            <tr>
-                <td>{{this.label}}</td>
-                <td class="amount">₹{{this.amount}}</td>
-            </tr>
-            {{/each}}
-        </tbody>
-    </table>
+    <div class="salary-container">
+        <div class="salary-box">
+            <div class="section-header">EARNINGS</div>
+            <table class="table">
+                {{#each earnings}}
+                {{#if this.amount}}
+                <tr>
+                    <td>{{this.label}}</td>
+                    <td class="text-right">₹{{this.amount}}</td>
+                </tr>
+                {{/if}}
+                {{/each}}
+            </table>
+        </div>
+        <div class="salary-box">
+            <div class="section-header">DEDUCTIONS</div>
+            <table class="table">
+                {{#each deductions}}
+                {{#if this.amount}}
+                <tr>
+                    <td>{{this.label}}</td>
+                    <td class="text-right">₹{{this.amount}}</td>
+                </tr>
+                {{/if}}
+                {{/each}}
+            </table>
+        </div>
+    </div>
 
-    <div class="summary-box">
-        <div class="summary-row"><span>Gross Earnings:</span><span class="amount">₹{{totals.gross}}</span></div>
-        <div class="summary-row"><span>Total Deductions:</span><span class="amount">₹{{totals.deductions}}</span></div>
-        <div class="summary-row total"><span>Net Salary:</span><span class="amount">₹{{totals.net}}</span></div>
+    <div class="employer-section">
+        <div style="font-weight: 700; font-size: 11px; color: #0369A1;">Employer Contributions (Excluded from Net Pay)</div>
+        <div class="employer-grid">
+            <div class="emp-contrib-item">PF: ₹{{employerContributions.pf}}</div>
+            <div class="emp-contrib-item">EPS: ₹{{employerContributions.eps}}</div>
+            <div class="emp-contrib-item">ESI: ₹{{employerContributions.esi}}</div>
+            <div class="emp-contrib-item">EDLI: ₹{{employerContributions.edli}}</div>
+            <div class="emp-contrib-item">Admin: ₹{{employerContributions.adminCharges}}</div>
+            <div class="emp-contrib-item">LWF: ₹{{employerContributions.lwf}}</div>
+        </div>
+    </div>
+
+    <div class="summary-footer">
+        <div class="summary-total-box">
+            <div class="summary-line"><span>Gross Pay:</span> <span>₹{{totals.gross}}</span></div>
+            <div class="summary-line"><span>Total Deductions:</span> <span>₹{{totals.deductions}}</span></div>
+            <div class="summary-line net-pay"><span>NET PAY:</span> <span>₹{{totals.net}}</span></div>
+        </div>
     </div>
 
     <div class="footer">
-        <p>This is a computer-generated document and does not require a physical signature.</p>
-        <p>&copy; {{payroll.year}} {{company.name}} | All Rights Reserved</p>
+        <p>This is a computer-generated payslip and does not require a signature.</p>
+        <p>Confidential • Generate by Solar HRM System</p>
     </div>
 </body>
 </html>

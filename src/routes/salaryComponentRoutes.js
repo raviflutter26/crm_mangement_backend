@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/salaryComponentController');
+const { authenticate, denySuperAdmin } = require('../middleware/auth');
+
+router.use(authenticate, denySuperAdmin);
 
 // GET all components (with optional ?category=earning|deduction|benefit|reimbursement)
 router.get('/', ctrl.getAll);

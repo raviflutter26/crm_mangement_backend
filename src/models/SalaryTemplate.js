@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const salaryTemplateSchema = new mongoose.Schema(
     {
-        name: { type: String, required: true, unique: true },
+        name: { type: String, required: true },
         description: { type: String },
         basicPercent: { type: Number, required: true, default: 40 },
         hraPercent: { type: Number, required: true, default: 20 },
@@ -11,10 +11,14 @@ const salaryTemplateSchema = new mongoose.Schema(
         isDefault: { type: Boolean, default: false },
         department: { type: String, default: 'All' },
         role: { type: String, default: 'All' },
+        organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
         isActive: { type: Boolean, default: true }
     },
     { timestamps: true }
 );
+
+// Compound index for unique name PER organization
+salaryTemplateSchema.index({ name: 1, organizationId: 1 }, { unique: true });
 
 // Ensure total is 100%
 salaryTemplateSchema.pre('save', function(next) {

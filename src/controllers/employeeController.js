@@ -177,9 +177,11 @@ exports.createEmployee = async (req, res, next) => {
 
         // 4. Create associated User within transaction
         const userData = {
-            name: `${firstName} ${lastName}`,
+            firstName: firstName,
+            lastName: lastName,
             email: email.toLowerCase(),
             panNumber: panNumber.toUpperCase(),
+            organizationId: req.body.organizationId || req.user?.organizationId,
             password: null, // Force null to trigger "Set Password" flow
             role: role,
             department: req.body.department || null,
@@ -280,7 +282,8 @@ exports.updateEmployee = async (req, res, next) => {
         if (role || firstName || lastName || req.body.department || req.body.designation || panNumber) {
             let updatePayload = {};
             if (role) updatePayload.role = role;
-            if (firstName && lastName) updatePayload.name = `${firstName} ${lastName}`;
+            if (firstName) updatePayload.firstName = firstName;
+            if (lastName) updatePayload.lastName = lastName;
             if (req.body.department !== undefined) updatePayload.department = req.body.department;
             if (req.body.designation !== undefined) updatePayload.designation = req.body.designation;
             if (panNumber) updatePayload.panNumber = panNumber.toUpperCase();

@@ -1,39 +1,17 @@
 const mongoose = require('mongoose');
 
-const departmentSchema = new mongoose.Schema(
-    {
-        name: {
-            type: String,
-            required: true,
-            unique: true,
-            trim: true,
-        },
-        description: {
-            type: String,
-            default: null,
-        },
-        head: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Employee',
-            default: null,
-        },
-        parentDepartment: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Department',
-            default: null,
-        },
-        isActive: {
-            type: Boolean,
-            default: true,
-        },
-        zohoRecordId: {
-            type: String,
-            default: null,
-        },
-    },
-    {
-        timestamps: true,
-    }
-);
+const DepartmentSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    code: { type: String },
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+    managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    parentDepartmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
+    description: { type: String },
+    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { timestamps: true });
 
-module.exports = mongoose.model('Department', departmentSchema);
+// Ensure unique department names within the same organization
+DepartmentSchema.index({ organizationId: 1, name: 1 }, { unique: true });
+
+module.exports = mongoose.model('Department', DepartmentSchema);

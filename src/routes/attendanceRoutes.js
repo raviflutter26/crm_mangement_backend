@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, denySuperAdmin } = require('../middleware/auth');
 const ctrl = require('../controllers/attendanceController');
+
+router.use(authenticate, denySuperAdmin);
 
 // Records
 router.get('/', authenticate, ctrl.getAttendance);
