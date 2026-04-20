@@ -35,6 +35,23 @@ const invitationRoutes = require('./invitationRoutes');
 const systemHealthRoutes = require('./systemHealthRoutes');
 const masterRoutes = require('./masterRoutes');
 const superadminRoutes = require('./superadminRoutes');
+const leavePolicyRoutes = require('./leavePolicyRoutes');
+const permissionConfigRoutes = require('./permissionConfigRoutes');
+
+// NEW: Phase 2 modules
+const projectRoutes = require('./projectRoutes');
+const vendorRoutes = require('./vendorRoutes');
+const jobCardRoutes = require('./jobCardRoutes');
+const travelRequestRoutes = require('./travelRequestRoutes');
+const incidentRoutes = require('./incidentRoutes');
+const ppeRecordRoutes = require('./ppeRecordRoutes');
+const reimbursementRoutes = require('./reimbursementRoutes');
+const siteAllowanceRoutes = require('./siteAllowanceRoutes');
+const trainingRoutes = require('./trainingRoutes');
+const certificationRoutes = require('./certificationRoutes');
+const announcementRoutes = require('./announcementRoutes');
+const employeeDocumentRoutes = require('./employeeDocumentRoutes');
+const timesheetRoutes = require('./timesheetRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -74,6 +91,25 @@ router.use('/invitations', invitationRoutes);
 router.use('/master', masterRoutes);
 router.use('/superadmin', superadminRoutes);
 router.use('/system', systemHealthRoutes);
+
+// Admin Config Routes
+router.use('/admin/config/leave-policy', leavePolicyRoutes);
+router.use('/admin/config/permission', permissionConfigRoutes);
+
+// NEW: Phase 2 modules
+router.use('/projects', projectRoutes);
+router.use('/vendors', vendorRoutes);
+router.use('/job-cards', jobCardRoutes);
+router.use('/travel-requests', travelRequestRoutes);
+router.use('/incidents', incidentRoutes);
+router.use('/ppe-records', ppeRecordRoutes);
+router.use('/reimbursements', reimbursementRoutes);
+router.use('/site-allowances', siteAllowanceRoutes);
+router.use('/trainings', trainingRoutes);
+router.use('/certifications', certificationRoutes);
+router.use('/announcements', announcementRoutes);
+router.use('/employee-documents', employeeDocumentRoutes);
+router.use('/timesheets', timesheetRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

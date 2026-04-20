@@ -81,6 +81,20 @@ const employeeSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        bloodGroup: {
+            type: String,
+            enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', null],
+            default: null,
+        },
+        nationality: {
+            type: String,
+            default: 'Indian',
+        },
+        panNumber: {
+            type: String,
+            default: null,
+            trim: true,
+        },
         employmentType: {
             type: String,
             enum: ['Full-time', 'Contract', 'Intern', 'Part-time', 'Probation', null],
@@ -128,6 +142,15 @@ const employeeSchema = new mongoose.Schema(
         salaryStructure: { type: String, default: 'Standard' },
         ctc: { type: Number, default: 0 },
         paymentCycle: { type: String, enum: ['Monthly', 'Weekly'], default: 'Monthly' },
+        zohoRoleId: {
+            type: String,
+            default: null,
+        },
+        zohoRole: {
+            type: String,
+            enum: ['Admin', 'Manager', 'Employee', null],
+            default: null,
+        },
         status: {
             type: String,
             enum: ['Active', 'Probation', 'Notice Period', 'Terminated', 'On Leave', 'Inactive'],
@@ -179,6 +202,41 @@ const employeeSchema = new mongoose.Schema(
             name: String,
             relationship: String,
             phone: String,
+        },
+        workExperience: [
+            {
+                jobTitle: { type: String },
+                employer: { type: String },
+                fromDate: { type: Date },
+                toDate: { type: Date },
+                description: { type: String },
+            },
+        ],
+        expertise: {
+            type: [String],
+            default: [],
+        },
+        education: [
+            {
+                degree: { type: String },
+                institution: { type: String },
+                year: { type: Number },
+                specialization: { type: String },
+            },
+        ],
+        addedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            default: null,
+        },
+        modifiedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            default: null,
+        },
+        modifiedIPAddress: {
+            type: String,
+            default: null,
         },
         syncedFromZoho: {
             type: Boolean,

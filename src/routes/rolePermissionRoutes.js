@@ -3,9 +3,9 @@ const router = express.Router();
 const { getModulePermissions, updateAllPermissions } = require('../controllers/rolePermissionController');
 const { authenticate, authorize } = require('../middleware/auth');
 
-// Only Admins should manage permissions
+// Admin and HR should manage permissions
 router.use(authenticate);
-router.use(authorize('Admin'));
+router.use(authorize('Admin', 'HR'));
 
 router.get('/', getModulePermissions);
 router.put('/', updateAllPermissions);

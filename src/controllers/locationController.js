@@ -220,7 +220,11 @@ exports.getCities = async (req, res, next) => {
  */
 exports.getLocations = async (req, res, next) => {
     try {
-        const locations = await Location.find({ isActive: true });
+        const { organizationId } = req.query;
+        const filter = { isActive: true };
+        if (organizationId) filter.organizationId = organizationId;
+
+        const locations = await Location.find(filter);
         res.status(200).json({
             success: true,
             data: locations
@@ -236,7 +240,11 @@ exports.getLocations = async (req, res, next) => {
  */
 exports.createLocation = async (req, res, next) => {
     try {
-        const location = await Location.create(req.body);
+        const { organizationId } = req.body;
+        // Fallback to user's org if not provided
+        const orgId = organizationId || req.user?.organizationId;
+        
+        const location = await Location.create({ ...req.body, organizationId: orgId });
         res.status(201).json({
             success: true,
             data: location

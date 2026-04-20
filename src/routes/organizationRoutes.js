@@ -8,27 +8,27 @@ const locationRoutes = require('./locationRoutes');
 // Public or Protected depending on requirement, usually Admin only
 router.use(authenticate);
 
-// Organization Management
-router.post('/', authorize('Admin'), organizationController.createOrganization);
-router.get('/', organizationController.getOrganizations);
-router.get('/:id', organizationController.getOrganizationById);
-router.put('/:id', authorize('Admin'), organizationController.updateOrganization);
-router.patch('/:id/status', authorize('Admin'), organizationController.updateOrganizationStatus);
-router.delete('/:id', authorize('Admin'), organizationController.deleteOrganization);
-router.post('/:id/impersonate', authorize('Admin'), organizationController.impersonateOrganization);
-
-// Sub-resources (Designations, Branches, Holidays)
+// Sub-resources MUST come before /:id wildcard to prevent Express matching them as IDs
 router.get('/designations', organizationController.getDesignations);
-router.post('/designations', authorize('Admin'), organizationController.createDesignation);
+router.post('/designations', authorize('Admin', 'HR'), organizationController.createDesignation);
 
 router.get('/branches', organizationController.getBranches);
-router.post('/branches', authorize('Admin'), organizationController.createBranch);
+router.post('/branches', authorize('Admin', 'HR'), organizationController.createBranch);
 
 router.get('/holidays', organizationController.getHolidays);
-router.post('/holidays', authorize('Admin'), organizationController.createHoliday);
+router.post('/holidays', authorize('Admin', 'HR'), organizationController.createHoliday);
 
 // Nested routes to support legacy frontend paths
 router.use('/shifts', shiftRoutes);
 router.use('/locations', locationRoutes);
+
+// Organization Management (/:id wildcard AFTER sub-resources)
+router.post('/', authorize('Admin'), organizationController.createOrganization);
+router.get('/', organizationController.getOrganizations);
+router.get('/:id', organizationController.getOrganizationById);
+router.put('/:id', authorize('Admin', 'HR'), organizationController.updateOrganization);
+router.patch('/:id/status', authorize('Admin', 'HR'), organizationController.updateOrganizationStatus);
+router.delete('/:id', authorize('Admin'), organizationController.deleteOrganization);
+router.post('/:id/impersonate', authorize('Admin'), organizationController.impersonateOrganization);
 
 module.exports = router;

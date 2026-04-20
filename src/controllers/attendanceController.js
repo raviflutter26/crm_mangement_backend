@@ -4,84 +4,56 @@ const Shift = require('../models/Shift');
 const Permission = require('../models/Permission');
 const ComplianceSettings = require('../models/ComplianceSettings');
 const configService = require('../services/configService');
+const attendanceConfigService = require('../services/attendanceConfigService');
+const permissionService = require('../services/permissionService');
 const zohoPeopleService = require('../services/zohoPeopleService');
 const { sendEmail } = require('../services/emailService');
 const mongoose = require('mongoose');
 
 /**
- * @desc    Get attendance records
+ * @desc    Get all attendance records
  * @route   GET /api/attendance
  */
 exports.getAttendance = async (req, res, next) => {
     try {
-        const { page = 1, limit = 50, employee, date, startDate, endDate, status, source } = req.query;
+        const { employeeId, startDate, endDate, status } = req.query;
+        let query = {};
 
-        const query = {};
+        // Security: Scoping based on role
+        const selfEmp = await Employee.findOne({ email: req.user.email });
         
-        // Enforce role-based access
-        if (req.user) {
-            if (req.user.role === 'Employee') {
-                const emp = await Employee.findOne({ email: req.user.email });
-                if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
-                query.employee = emp._id;
-            } else if (req.user.role === 'Manager') {
-                const mgrEmp = await Employee.findOne({ email: req.user.email });
-                if (!mgrEmp) return res.status(403).json({ success: false, message: 'Manager profile not found.' });
-                
-                const allowedEmps = await Employee.find({ 
-                    $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
-                }).select('_id');
-                const allowedIds = allowedEmps.map(e => e._id);
-                
-                // If they explicitly asked for an employee, verify it's in their team
-                if (employee) {
-                    if (!allowedIds.some(id => id.toString() === employee.toString())) {
-                        return res.status(403).json({ success: false, message: 'Unauthorized employee query.' });
-                    }
-                    query.employee = employee;
-                } else {
-                    query.employee = { $in: allowedIds };
-                }
-            } else if (employee) {
-                // HR or Admin
-                query.employee = employee;
+        if (employeeId && (['admin', 'hr', 'superadmin', 'Admin', 'HR'].includes(req.user.role) || req.user.role === 'Manager')) {
+            // HR/Admin explicitly requesting someone specifically
+            query.employee = employeeId;
+        } else if (req.user.role === 'Employee' || !employeeId) {
+            // Default to SELF if no employeeId provided or if role is Employee
+            if (!selfEmp) {
+                // If it's a manager/HR with no employee profile, they have no personal attendance to show
+                if (req.user.role === 'Employee') return res.status(404).json({ success: false, message: 'Employee profile not found.' });
+                query.employee = new mongoose.Types.ObjectId(); // Search for dummy to return empty
+            } else {
+                query.employee = selfEmp._id;
             }
         }
-        
-        if (date) {
-            const start = new Date(date);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(start);
-            end.setDate(end.getDate() + 1);
-            query.date = { $gte: start, $lt: end };
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) query.date.$lte = new Date(endDate);
         }
-        if (startDate && endDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-            query.date = { $gte: start, $lte: end };
+
+        if (status) {
+            query.status = status;
         }
-        if (status) query.status = status;
-        if (source) query.source = source;
 
         const records = await Attendance.find(query)
-            .populate('employee', 'firstName lastName employeeId department designation')
-            .sort('-date')
-            .skip((page - 1) * limit)
-            .limit(parseInt(limit));
-
-        const total = await Attendance.countDocuments(query);
+            .populate('employee', 'firstName lastName employeeId department')
+            .sort({ date: -1 });
 
         res.status(200).json({
             success: true,
-            data: records,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total,
-                pages: Math.ceil(total / limit),
-            },
+            count: records.length,
+            data: records
         });
     } catch (error) {
         next(error);
@@ -96,12 +68,17 @@ exports.checkIn = async (req, res, next) => {
     try {
         let { employeeId, source, latitude, longitude, deviceId, ipAddress } = req.body;
         
-        // Security & Consistency Fix: Always resolve true Employee._id if logged in as Employee
-        if (req.user && req.user.role === 'Employee') {
-            const Employee = require('../models/Employee'); // Ensure model is loaded
-            const emp = await Employee.findOne({ email: req.user.email });
-            if (emp) employeeId = emp._id;
+        // Resolve true Employee._id from session email for self-actions
+        const selfEmp = await Employee.findOne({ email: req.user.email });
+        if (selfEmp && (!employeeId || employeeId === req.user.id.toString() || employeeId === selfEmp._id.toString())) {
+            employeeId = selfEmp._id;
         }
+
+        const employee = await Employee.findById(employeeId).populate('organizationId');
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+        const organizationId = employee.organizationId?._id;
+        if (!organizationId) return res.status(400).json({ success: false, message: 'Organization ID missing from employee profile.' });
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -110,255 +87,169 @@ exports.checkIn = async (req, res, next) => {
 
         let record = await Attendance.findOne({ employee: employeeId, date: { $gte: today, $lt: tomorrow } });
 
-        if (record) {
-            // Validate against multiple check-ins limits
-            if (record.sessions && record.sessions.length > 0) {
-                const lastSession = record.sessions[record.sessions.length - 1];
-                if (!lastSession.checkOut) {
-                    return res.status(400).json({ success: false, message: 'Already checked in. Please check out first.' });
-                }
-                if (record.sessions.length >= 5) {
-                    return res.status(400).json({ success: false, message: 'Maximum of 5 check-ins reached for today.' });
-                }
-            }
+        // Security: Check if there is ANY open session (possibly from previous days)
+        const openSessionRecord = await Attendance.findOne({ 
+            employee: employeeId, 
+            "sessions.checkOut": null 
+        });
+
+        if (openSessionRecord) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Already checked in. Please check out of your previous session first.',
+                recordDate: openSessionRecord.date
+            });
         }
 
         const checkInTime = new Date();
+        const config = await attendanceConfigService.getEffectiveConfig(organizationId, today);
 
-        // Calculate late mark based on shift & organization
-        let lateBy = 0;
+        // Calculate initial status (will be refined on checkout)
+        // For first check-in, we check if they are late
         let isLate = false;
+        let lateBy = 0;
         let status = 'Present';
 
-        // Fetch employee details with shift and organization settings
-        const employee = await Employee.findById(employeeId).populate('shift').populate('organizationId');
-        
-        // Define effective settings (Priority: Shift > Organization > Global Default)
-        const shift = employee?.shift;
-        const orgSettings = employee?.organizationId?.attendanceSettings;
-        
-        const startTimeStr = shift?.startTime || orgSettings?.defaultStartTime || '09:00';
-        const graceMins = shift?.graceMinutes ?? orgSettings?.graceMinutes ?? 15;
-        const maxLate = shift?.maxLatePerMonth ?? orgSettings?.maxLatePerMonth ?? 3;
-
-        // Only calculate late marks on the FIRST check-in of the day
         if (!record || record.sessions.length === 0) {
-            const [startHour, startMin] = startTimeStr.split(':').map(Number);
-
+            const [startHour, startMin] = (config?.startTime || '09:00').split(':').map(Number);
             const shiftStart = new Date(today);
             shiftStart.setHours(startHour, startMin, 0, 0);
 
+            const graceMins = config?.graceMinutes ?? 30;
             const graceThreshold = new Date(shiftStart);
             graceThreshold.setMinutes(graceThreshold.getMinutes() + graceMins);
 
-            // Permission check (Short Leave)
-            const approvedPermission = await Permission.findOne({
+            // Permission Adjustment
+            const monthYear = today.toISOString().slice(0, 7);
+            const approvedPermissions = await Permission.find({
                 employee: employeeId,
-                date: today,
-                status: 'Approved'
+                requestedDate: { $gte: today, $lt: tomorrow },
+                status: 'Approved',
+                permissionType: 'late_arrival'
             });
 
-            if (approvedPermission) {
-                graceThreshold.setHours(graceThreshold.getHours() + approvedPermission.hoursRequest);
+            if (approvedPermissions.length > 0) {
+                const totalPermMins = approvedPermissions.reduce((acc, p) => acc + p.durationMinutes, 0);
+                graceThreshold.setMinutes(graceThreshold.getMinutes() + totalPermMins);
             }
 
-            if (checkInTime > shiftStart) {
+            if (checkInTime > graceThreshold) {
+                isLate = true;
                 lateBy = Math.round((checkInTime - shiftStart) / 60000);
-                if (checkInTime > graceThreshold) {
-                    isLate = true;
-                }
-            }
-
-            if (isLate) {
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const lateCount = await Attendance.countDocuments({
-                    employee: employeeId,
-                    date: { $gte: monthStart, $lt: today },
-                    isLate: true
-                });
-
-                if (lateCount >= maxLate) {
-                    // Penalty: Convert next late to Half Day
-                    status = 'Half Day';
-                }
-            }
-            
-            // Organization-level cutoff for Absent (if provided)
-            if (isLate && orgSettings?.lateAfterGraceAction === 'Absent') {
-                status = 'Absent';
+                
+                if (config?.lateAfterGraceAction === 'Absent') status = 'Absent';
+                else if (config?.lateAfterGraceAction === 'HalfDay') status = 'Half Day';
             }
         } else {
-            // Keep the initial status for subsequent check-ins
             status = record.status;
-            lateBy = record.lateBy;
             isLate = record.isLate;
+            lateBy = record.lateBy;
         }
 
         if (!record) {
             record = new Attendance({
                 employee: employeeId,
+                organizationId,
                 date: today,
-                checkIn: checkInTime, // keep initial checkIn for legacy reference
+                checkIn: checkInTime,
                 sessions: [{ checkIn: checkInTime }],
-                status: status,
+                status,
                 source: source || 'web',
-                location: {
-                    checkInLat: latitude || null,
-                    checkInLng: longitude || null,
-                },
-                deviceId: deviceId || null,
+                location: { checkInLat: latitude || null, checkInLng: longitude || null },
+                deviceId,
                 ipAddress: ipAddress || req.ip,
                 lateBy,
-                isLate,
+                isLate
             });
         } else {
-            // Append a new session
             record.sessions.push({ checkIn: checkInTime });
-            record.status = status; // preserves absent status if already set
-            
-            // Set first check-in legacy reference if it doesn't exist yet
-            if (!record.checkIn) {
-                 record.checkIn = checkInTime;
-            }
         }
 
         await record.save();
-        
-        let message = 'Checked in successfully!';
-        if (record.sessions.length === 1) {
-             message = status === 'Absent' ? 'Checked in after cutoff limit. Marked as Absent.' : isLate ? `Checked in (${lateBy} min late)` : 'Checked in!';
-        }
-        
-        res.status(200).json({ success: true, data: record, message });
-    } catch (error) {
-        next(error);
-    }
+        res.status(200).json({ success: true, data: record, message: 'Checked in!' });
+    } catch (error) { next(error); }
 };
 
 /**
  * @desc    Biometric/GPS-enabled Check Out
- * @route   POST /api/attendance/check-out
+ * @route   POST /api/attendance/checkout
  */
 exports.checkOut = async (req, res, next) => {
     try {
         let { employeeId, latitude, longitude } = req.body;
+        const originId = employeeId;
+        // Resolve true Employee._id from session email for self-actions
+        const selfEmp = await Employee.findOne({ email: req.user.email });
         
-        // Security & Consistency Fix: Always resolve true Employee._id if logged in as Employee
-        if (req.user && req.user.role === 'Employee') {
-            const Employee = require('../models/Employee');
-            const emp = await Employee.findOne({ email: req.user.email });
-            if (emp) employeeId = emp._id;
-        }
+        // Build a list of all possible IDs that might have been used for this employee
+        let targetEmployeeIds = [];
+        if (selfEmp) targetEmployeeIds.push(selfEmp._id);
+        if (originId) targetEmployeeIds.push(originId);
+        if (req.user.id) targetEmployeeIds.push(req.user.id);
+        
+        // Unique IDs only, filter out any undefined/null
+        targetEmployeeIds = [...new Set(targetEmployeeIds.filter(id => id).map(id => id.toString()))];
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        // Fetch employee to get assigned shift
-        const Employee = require('../models/Employee');
-        const employee = await Employee.findById(employeeId).populate('shift').populate('organizationId');
-        const shift = employee?.shift;
-        const orgSettings = employee?.organizationId?.attendanceSettings;
-
-        let record;
-        // Night Shift Logic: If currently early morning, look for yesterday's record
-        if (shift?.isNightShift && today.getHours() < 12) {
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yStart = new Date(yesterday);
-            yStart.setHours(0, 0, 0, 0);
-            const yEnd = new Date(today);
-            yEnd.setHours(0, 0, 0, 0);
-
-            record = await Attendance.findOne({ 
-                employee: employeeId, 
-                date: { $gte: yStart, $lt: yEnd },
-                'sessions.checkOut': null 
-            });
-        }
-
-        // Fallback to today's record
-        if (!record) {
-            record = await Attendance.findOne({ 
-                employee: employeeId, 
-                date: { $gte: today, $lt: tomorrow } 
-            });
+        // Try to find record for today first among any of these IDs
+        let record = await Attendance.findOne({ 
+            employee: { $in: targetEmployeeIds }, 
+            date: { $gte: today, $lt: tomorrow } 
+        }).populate('organizationId');
+        
+        // If no record for today has an open session, look for the most recent open session from any day for any of these IDs
+        if (!record || !record.sessions.some(s => !s.checkOut)) {
+            const openRecord = await Attendance.findOne({ 
+                employee: { $in: targetEmployeeIds }, 
+                "sessions.checkOut": null 
+            }).sort({ date: -1 }).populate('organizationId');
+            
+            if (openRecord) record = openRecord;
         }
 
         if (!record || !record.sessions || record.sessions.length === 0) {
-            return res.status(400).json({ success: false, message: 'Must check in first.' });
-        }
-        
-        const lastSession = record.sessions[record.sessions.length - 1];
-        if (lastSession.checkOut) {
-            return res.status(400).json({ success: false, message: 'No active session found. Already checked out.' });
+            return res.status(400).json({ 
+                success: false, 
+                message: `Must check in first. (System tried mapping your profile across IDs: ${targetEmployeeIds.join(', ')})` 
+            });
         }
 
+        // Close ALL open sessions in this record to resolve any orphaned states
+        let closedCount = 0;
         const checkOutTime = new Date();
-        lastSession.checkOut = checkOutTime;
-        lastSession.hours = parseFloat(((checkOutTime - lastSession.checkIn) / (1000 * 60 * 60)).toFixed(2));
-        
-        // Sum total hours across all sessions
-        const sumHours = record.sessions.reduce((acc, curr) => acc + (curr.hours || 0), 0);
-        
-        // Fetch settings for overtime calculation
-        const settingsForOT = await ComplianceSettings.findOne({ isActive: true });
-        const stdHours = settingsForOT ? (() => {
-            const [sH, sM] = settingsForOT.attendanceSettings.checkInTime.split(':').map(Number);
-            const [eH, eM] = settingsForOT.attendanceSettings.checkOutTime.split(':').map(Number);
-            return (eH + eM/60) - (sH + sM/60);
-        })() : 9;
+        record.sessions.forEach(session => {
+            if (!session.checkOut) {
+                session.checkOut = checkOutTime;
+                session.hours = parseFloat(((checkOutTime - session.checkIn) / (1000 * 60 * 60)).toFixed(2));
+                closedCount++;
+            }
+        });
 
-        record.checkOut = checkOutTime; // track overall last checkout for legacy references
-        record.totalHours = parseFloat(sumHours.toFixed(2));
-        record.overtime = Math.max(0, parseFloat((record.totalHours - stdHours).toFixed(2)));
-        record.effectiveHours = Math.max(0, parseFloat((record.totalHours - (record.breakDuration / 60)).toFixed(2)));
-        
-        // Use the checkout location for the final or active session
+        if (closedCount === 0) return res.status(400).json({ success: false, message: 'Already checked out.' });
+
+        const totalHours = record.sessions.reduce((acc, s) => acc + (s.hours || 0), 0);
+        record.totalHours = parseFloat(totalHours.toFixed(2));
+        record.checkOut = checkOutTime;
         record.location.checkOutLat = latitude || null;
         record.location.checkOutLng = longitude || null;
 
-        // Strict 6:30 PM checkout rule (only applied if this is the final checkout of day)
-        // Note: For multi-sessions, any checkout before 6:30PM will flag them Absent,
-        // but if they check back in and check out AFTER 6:30 PM and finish >9 hrs, 
-        // they will revert back to 'Present'.
-        
-        // Final status logic based on Shift/Org settings
-        const requiredHours = shift?.workingHours || orgSettings?.workingHours || 8;
-        
-        // Apply Status Logic:
-        // IF totalHours >= requiredHours → Present
-        // IF totalHours < requiredHours → Half Day
-        
-        if (record.totalHours >= requiredHours) {
-            if (record.status !== 'Half Day' && record.status !== 'Absent') {
-                record.status = 'Present';
-            }
-        } else {
-            record.status = 'Half Day';
+        // Final Status Calculation from Config
+        const config = await attendanceConfigService.getEffectiveConfig(record.organizationId, today);
+        if (config) {
+            record.status = attendanceConfigService.calculateAttendanceStatus(record.checkIn, checkOutTime, totalHours, config);
         }
-
-        // Check for Early Leave for stats
-        const endTimeStr = shift?.endTime || orgSettings?.defaultEndTime || '18:00';
-        const [endHour, endMin] = endTimeStr.split(':').map(Number);
-        const shiftEnd = new Date(today);
-        shiftEnd.setHours(endHour, endMin, 0, 0);
-
-        if (checkOutTime < shiftEnd) {
-            record.earlyLeaveBy = Math.round((shiftEnd - checkOutTime) / 60000);
-        }
-
-        // Half day detection (override if needed, but per strict rules, they are just Absent if they don't do 9 hours. I will disable Half Day to strictly follow prompt).
-        // if (record.totalHours < 4 && record.totalHours > 0) {
-        //     record.status = 'Half Day';
-        // }
 
         await record.save();
-        res.status(200).json({ success: true, data: record });
-    } catch (error) {
-        next(error);
-    }
+        res.status(200).json({ 
+            success: true, 
+            data: record, 
+            message: `Successfully checked out of ${closedCount} session(s)!` 
+        });
+    } catch (error) { next(error); }
 };
 
 /**

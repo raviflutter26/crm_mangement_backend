@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const config = require('../config');
 const { sendEmail } = require('../services/emailService');
 const crypto = require('crypto');
@@ -108,6 +109,7 @@ exports.login = async (req, res, next) => {
             user.lastLogin = Date.now();
             await user.save(); // Password will be hashed by pre-save middleware
             
+            const emp = await Employee.findOne({ email: user.email });
             const token = generateToken(user._id);
             return res.status(200).json({
                 success: true,
@@ -115,6 +117,7 @@ exports.login = async (req, res, next) => {
                 data: {
                     user: {
                         id: user._id,
+                        employeeId: emp ? emp._id : null,
                         firstName: user.firstName,
                         lastName: user.lastName,
                         name: user.name,
@@ -152,6 +155,7 @@ exports.login = async (req, res, next) => {
         user.lastLogin = Date.now();
         await user.save({ validateBeforeSave: false });
 
+        const emp = await Employee.findOne({ email: user.email });
         const token = generateToken(user._id);
 
         res.status(200).json({
@@ -159,6 +163,7 @@ exports.login = async (req, res, next) => {
             data: {
                 user: {
                     id: user._id,
+                    employeeId: emp ? emp._id : null,
                     firstName: user.firstName,
                     lastName: user.lastName,
                     name: user.name,
@@ -181,8 +186,18 @@ exports.login = async (req, res, next) => {
  */
 exports.getMe = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.id);
-        res.status(200).json({ success: true, data: user });
+        const user = await User.findById(req.user.id).lean();
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        const emp = await Employee.findOne({ email: user.email });
+        
+        res.status(200).json({ 
+            success: true, 
+            data: { 
+                ...user, 
+                employeeId: emp ? emp._id : null 
+            } 
+        });
     } catch (error) {
         next(error);
     }

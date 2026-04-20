@@ -24,9 +24,17 @@ const leaveSchema = new mongoose.Schema(
             type: Number,
             required: true,
         },
+        halfDay: {
+            type: Boolean,
+            default: false,
+        },
         reason: {
             type: String,
             required: true,
+        },
+        documentUrl: {
+            type: String,
+            default: null,
         },
         status: {
             type: String,
@@ -38,13 +46,30 @@ const leaveSchema = new mongoose.Schema(
             ref: 'User',
             default: null,
         },
-        approvedAt: {
-            type: Date,
-            default: null,
-        },
-        rejectionReason: {
+        remarks: {
             type: String,
             default: null,
+        },
+        isBackdated: {
+            type: Boolean,
+            default: false,
+        },
+        excludedDays: {
+            type: Number,
+            default: 0,
+        },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            default: null,
+        },
+        leaveBalance: {
+            type: Number,
+            default: 0,
+        },
+        leaveCarryForward: {
+            type: Number,
+            default: 0,
         },
         zohoRecordId: {
             type: String,

@@ -73,6 +73,13 @@ const attendanceSchema = new mongoose.Schema(
         // Break tracking
         breakDuration: { type: Number, default: 0 }, // minutes
         effectiveHours: { type: Number, default: 0 }, // totalHours - break
+        // Zoho-mapped additional fields
+        workingHours: { type: Number, default: 0 }, // Net working hours (excluding breaks)
+        shiftName: { type: String, default: null }, // Denormalized shift name for quick access
+        deviationTime: { type: Number, default: 0 }, // Deviation / overtime in minutes
+        paidBreakHours: { type: Number, default: 0 },
+        unPaidBreakHours: { type: Number, default: 0 },
+        firstInLocation: { type: String, default: null }, // Geofence location label for check-in
         // Regularization
         regularized: { type: Boolean, default: false },
         regularizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

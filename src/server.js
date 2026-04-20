@@ -10,8 +10,13 @@ const connectDB = require('./config/database');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 const PayrollScheduler = require('./scheduler/payrollCron');
+const AttendanceScheduler = require('./scheduler/attendanceCron');
 
 const app = express();
+
+// Initialize Schedulers
+PayrollScheduler.init();
+AttendanceScheduler.init();
 
 // Trust proxy to resolve 'X-Forwarded-For' error with express-rate-limit behind proxies/tunnels
 app.set('trust proxy', 1);

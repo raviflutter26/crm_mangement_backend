@@ -1,183 +1,154 @@
 const Permission = require('../models/Permission');
 const Employee = require('../models/Employee');
-const User = require('../models/User');
-const ComplianceSettings = require('../models/ComplianceSettings');
+const permissionService = require('../services/permissionService');
 
 /**
- * @desc    Request Permission (Max 2 hours, 4 times/month)
+ * @desc    Apply for permission
  * @route   POST /api/permissions/request
  */
 exports.requestPermission = async (req, res, next) => {
     try {
-        const { date, hoursRequest, reason } = req.body;
+        const { permissionType, requestedDate, fromTime, toTime, reason } = req.body;
         
-        if (!date || !hoursRequest || !reason) {
-            return res.status(400).json({ success: false, message: 'Please provide all details' });
+        // 1. Identify Employee
+        let employeeId = req.user.id;
+        if (req.user.role === 'Employee') {
+            const emp = await Employee.findOne({ email: req.user.email }).populate('organizationId');
+            if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
+            employeeId = emp._id;
+            req.orgId = emp.organizationId?._id;
         }
 
-        const settings = await ComplianceSettings.findOne({ isActive: true });
-        const perSettings = settings?.attendanceSettings || {
-            monthlyPermissionHours: 4,
-            maxPermissionCount: 2
-        };
+        if (!req.orgId) return res.status(400).json({ success: false, message: 'Organization ID is required.' });
 
-        if (hoursRequest > 2) { // Keeping per-request limit at 2 or could also make it dynamic? Prompt didn't specify per-request, but typically it is. I'll stick to 2 but focus on the monthly totals.
-            return res.status(400).json({ success: false, message: 'Maximum 2 hours permission allowed per request' });
-        }
-
-        const employee = await Employee.findOne({ email: req.user.email });
-        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
-
-        const reqDate = new Date(date);
-        const month = reqDate.getMonth() + 1;
-        const year = reqDate.getFullYear();
-
-        // Check if employee exceeded count limit
-        const approvedAndPending = await Permission.find({
-            employee: employee._id,
-            month,
-            year,
-            status: { $in: ['Pending', 'Approved'] }
+        // 2. Validate using service
+        const dateObj = new Date(requestedDate);
+        const { durationMinutes, monthYear } = await permissionService.validatePermission(employeeId, req.orgId, {
+            fromTime, toTime, requestedDate: dateObj
         });
 
-        const countThisMonth = approvedAndPending.length;
-        const hoursThisMonth = approvedAndPending.reduce((acc, curr) => acc + curr.hoursRequest, 0);
-
-        if (countThisMonth >= perSettings.maxPermissionCount) {
-            return res.status(400).json({ success: false, message: `You have reached the limit of ${perSettings.maxPermissionCount} permissions this month` });
-        }
-
-        if (hoursThisMonth + hoursRequest > perSettings.monthlyPermissionHours) {
-            return res.status(400).json({ success: false, message: `You have reached the monthly limit of ${perSettings.monthlyPermissionHours} total permission hours. You have ${perSettings.monthlyPermissionHours - hoursThisMonth} hours remaining.` });
-        }
-
-        // Find manager ID.
-        let managerId = null;
-        if (employee.reportingManager) {
-            // employee.reportingManager is an ObjectId ref to another Employee
-            const managerEmployee = await Employee.findById(employee.reportingManager);
-            if (managerEmployee) {
-                const managerUser = await User.findOne({ email: managerEmployee.email });
-                if (managerUser) managerId = managerUser._id;
-            }
-        } 
-        
-        // Fallback to finding any admin if no direct manager is present
-        if (!managerId) {
-             const adminUser = await User.findOne({ role: 'Admin' }); // Matches enum capitalization
-             if (adminUser) managerId = adminUser._id;
-        }
-
-        if (!managerId) {
-             return res.status(400).json({ success: false, message: 'No manager or admin found to assign this request to' });
-        }
-
-        const permission = new Permission({
-            employee: employee._id,
-            date: reqDate,
-            hoursRequest,
+        // 3. Create Request
+        const permission = await Permission.create({
+            employee: employeeId,
+            organizationId: req.orgId,
+            permissionType,
+            requestedDate: dateObj,
+            fromTime,
+            toTime,
+            durationMinutes,
             reason,
-            month,
-            year,
-            manager: managerId
+            monthYear,
+            status: 'Pending'
         });
 
-        await permission.save();
-
-        res.status(201).json({ success: true, data: permission, message: 'Permission requested successfully' });
+        res.status(201).json({ success: true, data: permission });
     } catch (error) {
-        next(error);
+        res.status(400).json({ success: false, message: error.message });
     }
 };
 
 /**
- * @desc    Get permissions for logged in employee
+ * @desc    Get user's permission history & balance
  * @route   GET /api/permissions/my-permissions
  */
 exports.getMyPermissions = async (req, res, next) => {
     try {
-        const employee = await Employee.findOne({ email: req.user.email });
-        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+        const emp = await Employee.findOne({ email: req.user.email });
+        if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
 
-        const permissions = await Permission.find({ employee: employee._id }).sort('-createdAt');
-        res.status(200).json({ success: true, data: permissions });
-    } catch (error) {
-        next(error);
-    }
+        const history = await Permission.find({ employee: emp._id }).sort({ requestedDate: -1 });
+        
+        const monthYear = new Date().toISOString().slice(0, 7);
+        const usage = await permissionService.getMonthlyUsage(emp._id, monthYear);
+
+        res.status(200).json({ 
+            success: true, 
+            data: history,
+            usage: {
+                currentMonth: monthYear,
+                usedMinutes: usage.totalMinutes,
+                usedCount: usage.totalCount
+            }
+        });
+    } catch (error) { next(error); }
 };
 
 /**
- * @desc    Get pending permissions for a manager's team
- * @route   GET /api/permissions/team-permissions
- */
-exports.getTeamPermissions = async (req, res, next) => {
-    try {
-        // If admin, they see all
-        let query = {};
-        if (req.user.role === 'Manager') {
-             query.manager = req.user._id;
-        }
-
-        const permissions = await Permission.find(query)
-            .populate('employee', 'firstName lastName employeeId department')
-            .sort('-createdAt');
-            
-        res.status(200).json({ success: true, data: permissions });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * @desc    Approve or Reject a permission
+ * @desc    Handle (Approve/Reject) permission
  * @route   PATCH /api/permissions/:id/approve
  */
 exports.handlePermissionStatus = async (req, res, next) => {
     try {
-        const { status } = req.body; // 'Approved' or 'Rejected'
+        const { status } = req.body;
         if (!['Approved', 'Rejected'].includes(status)) {
-            return res.status(400).json({ success: false, message: 'Invalid status' });
+            return res.status(400).json({ success: false, message: 'Invalid status.' });
         }
 
         const permission = await Permission.findById(req.params.id);
-        if (!permission) return res.status(404).json({ success: false, message: 'Permission not found' });
+        if (!permission) return res.status(404).json({ success: false, message: 'Permission request not found.' });
 
-        // Add check if this manager is authorized to approve this, but we'll stick to role check from route
         permission.status = status;
+        permission.approvedBy = req.user.id;
         await permission.save();
 
-        res.status(200).json({ success: true, data: permission, message: `Permission ${status.toLowerCase()} successfully` });
-    } catch (error) {
-        next(error);
-    }
+        res.status(200).json({ success: true, data: permission });
+    } catch (error) { next(error); }
 };
 
 /**
- * @desc    Employee cancels their own permission request
+ * @desc    Get team permissions for manager
+ * @route   GET /api/permissions/team-permissions
+ */
+exports.getTeamPermissions = async (req, res, next) => {
+    try {
+        let query = {};
+        
+        // Role-based scoping
+        if (req.user.role === 'Manager') {
+            const mgrEmp = await Employee.findOne({ email: req.user.email });
+            if (mgrEmp) {
+                const team = await Employee.find({ reportingManager: mgrEmp._id }).select('_id');
+                query.employee = { $in: team.map(e => e._id) };
+            }
+        } else if (req.user.role === 'Employee') {
+            return res.status(200).json({ success: true, data: [] });
+        }
+        
+        if (req.query.employeeId && req.user.role !== 'Employee') {
+            query.employee = req.query.employeeId;
+        }
+
+        const permissions = await Permission.find(query)
+            .populate('employee', 'firstName lastName employeeId department')
+            .sort({ requestedDate: -1 });
+
+        res.status(200).json({ success: true, count: permissions.length, data: permissions });
+    } catch (error) { next(error); }
+};
+
+/**
+ * @desc    Cancel permission request
  * @route   PATCH /api/permissions/:id/cancel
  */
 exports.cancelPermission = async (req, res, next) => {
     try {
         const permission = await Permission.findById(req.params.id);
-        if (!permission) return res.status(404).json({ success: false, message: 'Permission not found' });
+        if (!permission) return res.status(404).json({ success: false, message: 'Permission not found.' });
+        
+        const emp = await Employee.findOne({ email: req.user.email });
+        if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
 
-        const employee = await Employee.findOne({ email: req.user.email });
-        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
-
-        if (permission.employee.toString() !== employee._id.toString()) {
-            return res.status(403).json({ success: false, message: 'Not authorized to cancel this request' });
+        if (String(permission.employee) !== String(emp._id)) {
+            return res.status(403).json({ success: false, message: 'Not authorized to cancel this request.' });
         }
 
         if (permission.status !== 'Pending') {
-            return res.status(400).json({ success: false, message: `Cannot cancel a request that is already ${permission.status}` });
+            return res.status(400).json({ success: false, message: `Cannot cancel a request with status '${permission.status}'.` });
         }
 
-        permission.status = 'Rejected'; // Can use Rejected or Cancelled based on schema (schema has Pending, Approved, Rejected). Using Rejected for now as cancellation.
-        permission.reason = permission.reason + ' (Cancelled by Employee)';
+        permission.status = 'Cancelled';
         await permission.save();
 
-        res.status(200).json({ success: true, data: permission, message: 'Permission cancelled successfully' });
-    } catch (error) {
-        next(error);
-    }
+        res.status(200).json({ success: true, message: 'Permission request cancelled.' });
+    } catch (error) { next(error); }
 };

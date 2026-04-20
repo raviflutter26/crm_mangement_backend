@@ -7,14 +7,31 @@ const permissionSchema = new mongoose.Schema(
             ref: 'Employee',
             required: true,
         },
-        date: {
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: true,
+        },
+        permissionType: {
+            type: String,
+            enum: ['early_leave', 'late_arrival', 'mid_day'],
+            required: true,
+        },
+        requestedDate: {
             type: Date,
             required: true,
         },
-        hoursRequest: {
+        fromTime: {
+            type: String, // HH:mm
+            required: true,
+        },
+        toTime: {
+            type: String, // HH:mm
+            required: true,
+        },
+        durationMinutes: {
             type: Number,
             required: true,
-            max: [2, 'Maximum permission allowed is 2 hours'],
         },
         reason: {
             type: String,
@@ -25,17 +42,13 @@ const permissionSchema = new mongoose.Schema(
             enum: ['Pending', 'Approved', 'Rejected'],
             default: 'Pending',
         },
-        manager: {
+        approvedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            required: true, // we will pull this from employee.reportingManager, or just find Admin/Manager
+            default: null,
         },
-        month: {
-            type: Number,
-            required: true,
-        },
-        year: {
-            type: Number,
+        monthYear: {
+            type: String, // YYYY-MM
             required: true,
         }
     },
