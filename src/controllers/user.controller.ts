@@ -22,7 +22,7 @@ export const list = async (req: Request, res: Response) => {
 
 export const getById = async (req: Request, res: Response) => {
     try {
-        const user = await userService.getUserById(req.params.id, req.scope);
+        const user = await userService.getUserById(req.params.id as string, req.scope);
         return sendResponse(res, 200, 'User details fetched', user);
     } catch (err: any) {
         return sendError(res, 404, err.message);

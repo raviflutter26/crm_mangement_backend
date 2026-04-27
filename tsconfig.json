@@ -11,7 +11,8 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "baseUrl": "./src",
-    "types": ["node", "express", "mongoose"]
+    "types": ["node", "express", "mongoose"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]

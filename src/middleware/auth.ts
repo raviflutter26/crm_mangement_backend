@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User';
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {

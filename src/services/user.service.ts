@@ -34,8 +34,8 @@ export const createUser = async (data: any, actor: any) => {
     const invitation = await Invitation.create({
         email: user.email,
         role: user.role,
-        organizationId: user.organizationId,
-        departmentId: user.departmentId,
+        organizationId: user.organizationId as any,
+        departmentId: user.departmentId as any,
         token: invitationToken,
         expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours
         invitedBy: actor._id

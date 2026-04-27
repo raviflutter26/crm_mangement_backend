@@ -12,7 +12,7 @@ export const authorize = (...roles: string[]) => {
                 AuditLog.create({
                     actorId: req.user._id,
                     actorRole: req.user.role,
-                    organizationId: req.user.organizationId,
+                    organizationId: req.user.organizationId as any,
                     action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
                     module: req.originalUrl,
                     targetId: req.user._id,

@@ -22,7 +22,7 @@ export const list = async (req: Request, res: Response) => {
 
 export const update = async (req: Request, res: Response) => {
     try {
-        const dept = await deptService.updateDepartment(req.params.id, req.scope, req.body, req.user);
+        const dept = await deptService.updateDepartment(req.params.id as string, req.scope, req.body, req.user);
         return sendResponse(res, 200, 'Department updated', dept);
     } catch (err: any) {
         return sendError(res, 400, err.message);

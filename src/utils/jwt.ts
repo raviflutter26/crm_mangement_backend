@@ -11,13 +11,13 @@ export const generateAccessToken = (id: mongoose.Types.ObjectId, role: string, i
     if (impersonatorId) payload.impersonatorId = impersonatorId;
     return jwt.sign(payload, ACCESS_TOKEN_SECRET, {
         expiresIn: ACCESS_TOKEN_EXPIRE,
-    });
+    } as any);
 };
 
 export const generateRefreshToken = (id: mongoose.Types.ObjectId) => {
     return jwt.sign({ id }, REFRESH_TOKEN_SECRET, {
         expiresIn: REFRESH_TOKEN_EXPIRE,
-    });
+    } as any);
 };
 
 export const verifyRefreshToken = (token: string) => {

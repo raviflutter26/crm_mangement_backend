@@ -38,7 +38,7 @@ export const getAll = async (req: Request, res: Response) => {
 
 export const getOne = async (req: Request, res: Response) => {
     try {
-        const org = await orgService.getOrganizationById(req.params.id);
+        const org = await orgService.getOrganizationById(req.params.id as string);
         return sendResponse(res, 200, 'Organization fetched', org);
     } catch (err: any) {
         return sendError(res, 404, err.message);
@@ -47,7 +47,7 @@ export const getOne = async (req: Request, res: Response) => {
 
 export const update = async (req: Request, res: Response) => {
     try {
-        const org = await orgService.updateOrganization(req.params.id, req.body, req.user);
+        const org = await orgService.updateOrganization(req.params.id as string, req.body, req.user);
         return sendResponse(res, 200, 'Organization updated', org);
     } catch (err: any) {
         return sendError(res, 400, err.message);
@@ -56,7 +56,7 @@ export const update = async (req: Request, res: Response) => {
 
 export const remove = async (req: Request, res: Response) => {
     try {
-        await orgService.deleteOrganization(req.params.id, req.user);
+        await orgService.deleteOrganization(req.params.id as string, req.user);
         return sendResponse(res, 200, 'Organization soft deleted successfully', null);
     } catch (err: any) {
         return sendError(res, 400, err.message);
@@ -65,7 +65,7 @@ export const remove = async (req: Request, res: Response) => {
 
 export const updateStatus = async (req: Request, res: Response) => {
     try {
-        const org = await orgService.updateOrganizationStatus(req.params.id, req.body.status, req.user);
+        const org = await orgService.updateOrganizationStatus(req.params.id as string, req.body.status, req.user);
         return sendResponse(res, 200, 'Organization status updated', org);
     } catch (err: any) {
         return sendError(res, 400, err.message);
@@ -74,7 +74,7 @@ export const updateStatus = async (req: Request, res: Response) => {
 
 export const impersonate = async (req: Request, res: Response) => {
     try {
-        const result = await orgService.impersonateOrganizationAdmin(req.params.id, req.user.id);
+        const result = await orgService.impersonateOrganizationAdmin(req.params.id as string, req.user!._id.toString());
         return sendResponse(res, 200, 'Impersonation successful', result);
     } catch (err: any) {
         return sendError(res, 400, err.message);

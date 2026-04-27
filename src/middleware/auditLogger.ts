@@ -15,7 +15,7 @@ export const auditLog = (action: string, module: string) => {
                 AuditLog.create({
                     actorId: req.user._id,
                     actorRole: req.user.role,
-                    organizationId: req.user.organizationId,
+                    organizationId: req.user.organizationId as any,
                     action,
                     module,
                     targetId: req.params.id || req.user._id, // Default to self or param ID
