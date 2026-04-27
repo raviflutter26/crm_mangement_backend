@@ -20,7 +20,8 @@ const OrganizationSchema = new mongoose.Schema({
     planType: { type: String, default: 'Starter' },
     billingCycle: { type: String, default: 'Monthly' },
     maxEmployees: { type: Number, default: 50 },
-    status: { type: String, enum: ['active', 'inactive', 'suspended'], default: 'active' },
+    status: { type: String, enum: ['active', 'inactive', 'suspended', 'pending'], default: 'active' },
+    deletedAt: { type: Date, default: null },
     settings: {
         attendance: {
             workingDays: { type: [String], default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },

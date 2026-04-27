@@ -73,12 +73,7 @@ const authorize = (...roles) => {
  * Specifically block SuperAdmin from employee-specific routes.
  */
 const denySuperAdmin = (req, res, next) => {
-    if (req.user && String(req.user.role).toLowerCase() === 'superadmin') {
-        return res.status(403).json({
-            success: false,
-            message: 'Super Admin cannot access employee-specific modules (Payroll, Attendance, Leaves)'
-        });
-    }
+    // Super Admins should be allowed to access everything for management visibility
     next();
 };
 

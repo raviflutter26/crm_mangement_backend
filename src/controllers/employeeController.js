@@ -22,6 +22,11 @@ exports.getEmployees = async (req, res, next) => {
         } = req.query;
 
         const query = {};
+        
+        // Always filter by organizationId
+        if (req.user && req.user.organizationId) {
+            query.organizationId = req.user.organizationId;
+        }
 
         if (search) {
             query.$or = [
@@ -31,19 +36,23 @@ exports.getEmployees = async (req, res, next) => {
                 { employeeId: { $regex: search, $options: 'i' } },
             ];
         }
-        if (department) query.department = department;
-        if (status) query.status = status;
+        if (department) {
+            query.department = { $regex: department, $options: 'i' };
+        }
+        if (status) {
+            query.status = { $regex: status, $options: 'i' };
+        }
 
-        // Role-based filtering for Managers
+        // Role-based filtering for Managers (within their organization)
         if (req.user && req.user.role.toLowerCase() === 'manager') {
-            const mgrEmp = await Employee.findOne({ email: req.user.email });
+            const mgrEmp = await Employee.findOne({ email: req.user.email, organizationId: req.user.organizationId });
             if (mgrEmp && mgrEmp.department) {
                 query.department = mgrEmp.department;
             } else if (mgrEmp) {
-                query.$or = [
+                query.$or = (query.$or || []).concat([
                     { reportingManager: mgrEmp._id },
                     { _id: mgrEmp._id }
-                ];
+                ]);
             }
         }
 
@@ -335,10 +344,16 @@ exports.deleteEmployee = async (req, res, next) => {
  */
 exports.getManagers = async (req, res, next) => {
     try {
-        // Find employees who have a manager-level role
-        const managers = await Employee.find({
-            role: { $in: ['Admin', 'HR', 'Manager'] }
-        }).select('firstName lastName email role department designation employeeId').sort({ firstName: 1 });
+        // Find employees who have a manager-level role in the same organization
+        const query = {
+            role: { $in: ['Admin', 'HR', 'Manager', 'admin', 'hr', 'manager', 'superadmin', 'superadmin'] }
+        };
+        
+        if (req.user && req.user.organizationId) {
+            query.organizationId = req.user.organizationId;
+        }
+
+        const managers = await Employee.find(query).select('firstName lastName email role department designation employeeId').sort({ firstName: 1 });
 
         res.status(200).json({
             success: true,

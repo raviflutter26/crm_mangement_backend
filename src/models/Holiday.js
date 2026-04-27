@@ -6,6 +6,7 @@ const holidaySchema = new mongoose.Schema({
     type: { type: String, enum: ['national', 'regional', 'company', 'restricted'], default: 'company' },
     isOptional: { type: Boolean, default: false },
     year: { type: Number, required: true },
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
     description: { type: String, trim: true },
     applicableBranches: { type: [String], default: [] }
 }, { timestamps: true });

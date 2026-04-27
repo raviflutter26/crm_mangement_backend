@@ -67,6 +67,31 @@ exports.createOrganization = async (req, res, next) => {
             isPasswordSet: !!admin?.password
         });
 
+        // 2.5 Create Employee record for the admin
+        const Employee = require('../models/Employee');
+        await Employee.create({
+            organizationId: organization._id,
+            employeeId: `EMP-${Date.now().toString().slice(-4)}`,
+            firstName: adminUser.firstName,
+            lastName: adminUser.lastName,
+            email: adminUser.email,
+            role: 'Admin',
+            status: 'Active',
+            dateOfJoining: new Date()
+        });
+
+        // 2.6 Create default departments for the organization
+        const Department = require('../models/Department');
+        const defaultDepts = [
+            'Management', 'Human Resources', 'Sales', 'Installation', 
+            'Engineering', 'Finance', 'Warehouse', 'Customer Support', 'IT'
+        ];
+        await Department.insertMany(defaultDepts.map(name => ({ 
+            name, 
+            organizationId: organization._id,
+            status: 'active'
+        })));
+
         // 3. Link organization to its creator
         organization.createdBy = adminUser._id;
         await organization.save();
@@ -287,14 +312,21 @@ exports.impersonateOrganization = async (req, res, next) => {
 // --- Designations ---
 exports.getDesignations = async (req, res, next) => {
     try {
-        const designations = await Designation.find({ status: 'active' });
+        const query = { isActive: true };
+        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
+        if (orgId) query.organizationId = orgId;
+        
+        const designations = await Designation.find(query).sort({ level: 1 });
         res.status(200).json({ success: true, data: designations });
     } catch (error) { next(error); }
 };
 
 exports.createDesignation = async (req, res, next) => {
     try {
-        const designation = await Designation.create(req.body);
+        const designation = await Designation.create({
+            ...req.body,
+            organizationId: req.user.organizationId
+        });
         res.status(201).json({ success: true, data: designation });
     } catch (error) { next(error); }
 };
@@ -302,14 +334,21 @@ exports.createDesignation = async (req, res, next) => {
 // --- Branches ---
 exports.getBranches = async (req, res, next) => {
     try {
-        const branches = await Branch.find({ status: 'active' });
+        const query = { isActive: true };
+        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
+        if (orgId) query.organizationId = orgId;
+
+        const branches = await Branch.find(query).sort({ name: 1 });
         res.status(200).json({ success: true, data: branches });
     } catch (error) { next(error); }
 };
 
 exports.createBranch = async (req, res, next) => {
     try {
-        const branch = await Branch.create(req.body);
+        const branch = await Branch.create({
+            ...req.body,
+            organizationId: req.user.organizationId
+        });
         res.status(201).json({ success: true, data: branch });
     } catch (error) { next(error); }
 };
@@ -318,14 +357,21 @@ exports.createBranch = async (req, res, next) => {
 exports.getHolidays = async (req, res, next) => {
     try {
         const year = req.query.year || new Date().getFullYear();
-        const holidays = await Holiday.find({ year: parseInt(year) }).sort({ date: 1 });
+        const query = { year: parseInt(year) };
+        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
+        if (orgId) query.organizationId = orgId;
+
+        const holidays = await Holiday.find(query).sort({ date: 1 });
         res.status(200).json({ success: true, data: holidays });
     } catch (error) { next(error); }
 };
 
 exports.createHoliday = async (req, res, next) => {
     try {
-        const holiday = await Holiday.create(req.body);
+        const holiday = await Holiday.create({
+            ...req.body,
+            organizationId: req.user.organizationId
+        });
         res.status(201).json({ success: true, data: holiday });
     } catch (error) { next(error); }
 };
