@@ -441,3 +441,85 @@ exports.getStats = async (req, res, next) => {
         next(error);
     }
 };
+
+/**
+ * @desc    Update employee bank details
+ * @route   PUT /api/employees/:id/bank
+ */
+exports.updateBankDetails = async (req, res, next) => {
+    try {
+        const { accountNumber, ifsc, bankName, accountType, uan, pan } = req.body;
+        const Employee = require('../models/Employee');
+        const employee = await Employee.findById(req.params.id);
+        
+        if (!employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found.' });
+        }
+
+        // Update basic employee properties
+        if (pan) employee.panNumber = pan.toUpperCase();
+        if (uan) {
+            employee.statutory = employee.statutory || {};
+            employee.statutory.pf = employee.statutory.pf || {};
+            employee.statutory.pf.uanNumber = uan;
+        }
+
+        // Handle Bank Details (using virtual setter for encryption)
+        employee.bankDetails = employee.bankDetails || {};
+        if (ifsc) employee.bankDetails.ifscCode = ifsc.toUpperCase();
+        if (bankName) employee.bankDetails.bankName = bankName;
+        if (accountNumber) employee.bankDetails.accountNumber = accountNumber; // triggers encryption setter
+
+        // Optionally, integrate with RazorpayService here to auto-create fund account
+        try {
+            const RazorpayService = require('../services/razorpayService');
+            if (accountNumber && ifsc) {
+                await RazorpayService.createFundAccount(employee, {
+                    accountHolderName: employee.fullName,
+                    ifscCode: ifsc,
+                    accountNumber: accountNumber
+                });
+            }
+        } catch (rpErr) {
+            console.error('Auto-sync with Razorpay failed, but bank details were saved', rpErr.message);
+        }
+
+        await employee.save();
+
+        res.status(200).json({ success: true, message: 'Bank details updated successfully', data: employee });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Update employee salary structure
+ * @route   PUT /api/employees/:id/salary-structure
+ */
+exports.updateSalaryStructure = async (req, res, next) => {
+    try {
+        const { basic, hra, da, ta, specialAllowance, lta, ctc } = req.body;
+        const Employee = require('../models/Employee');
+        const employee = await Employee.findById(req.params.id);
+        
+        if (!employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found.' });
+        }
+
+        employee.salary = employee.salary || {};
+        employee.salary.basic = Number(basic) || 0;
+        employee.salary.hra = Number(hra) || 0;
+        employee.salary.da = Number(da) || 0;
+        employee.salary.specialAllowance = (Number(specialAllowance) || 0) + (Number(ta) || 0) + (Number(lta) || 0); // combining allowances
+        employee.ctc = Number(ctc) || (employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.specialAllowance);
+        
+        // Calculate gross
+        employee.salary.grossSalary = employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.specialAllowance;
+
+        await employee.save();
+
+        res.status(200).json({ success: true, message: 'Salary structure updated successfully', data: employee });
+    } catch (error) {
+        next(error);
+    }
+};

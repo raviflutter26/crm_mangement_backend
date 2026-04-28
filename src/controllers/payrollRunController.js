@@ -38,6 +38,8 @@ exports.getPayrollRunById = async (req, res, next) => {
 exports.initiatePayrollRun = async (req, res, next) => {
     try {
         const { month, year } = req.body;
+        console.log(`🚀 Initiating Payroll Run for ${month}/${year}`);
+        
         if (!month || !year) return res.status(400).json({ success: false, message: 'Month and year are required.' });
 
         // Check for existing run
@@ -155,7 +157,14 @@ exports.initiatePayrollRun = async (req, res, next) => {
         await payrollRun.save();
 
         res.status(201).json({ success: true, data: payrollRun, message: `Payroll processed for ${employees.length} employees.` });
-    } catch (error) { next(error); }
+    } catch (error) { 
+        console.error('❌ Payroll Run Error:', error);
+        if (typeof next === 'function') {
+            next(error); 
+        } else {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 };
 
 // Approve payroll run

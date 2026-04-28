@@ -21,6 +21,13 @@ const razorpayClient = axios.create({
 class RazorpayService {
     
     /**
+     * Helper to check if we are in Mock/Demo mode
+     */
+    static isMockMode() {
+        return !process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID.startsWith('your_') || process.env.RAZORPAY_KEY_ID === 'mock';
+    }
+
+    /**
      * Create or update a Razorpay Contact for an employee
      */
     static async syncContact(employee) {
@@ -32,6 +39,14 @@ class RazorpayService {
                 type: "employee",
                 reference_id: employee.employeeId
             };
+
+            if (this.isMockMode()) {
+                console.log('[MOCK MODE] Syncing Contact:', data.name);
+                const mockId = `cont_${Math.random().toString(36).substr(2, 9)}`;
+                employee.razorpayContactId = employee.razorpayContactId || mockId;
+                await employee.save();
+                return { id: employee.razorpayContactId };
+            }
 
             let response;
             if (employee.razorpayContactId) {
@@ -69,6 +84,14 @@ class RazorpayService {
                 }
             };
 
+            if (this.isMockMode()) {
+                console.log('[MOCK MODE] Creating Fund Account for:', data.bank_account.name);
+                const mockId = `fa_${Math.random().toString(36).substr(2, 9)}`;
+                employee.razorpayFundAccountId = mockId;
+                await employee.save();
+                return { id: mockId };
+            }
+
             const response = await razorpayClient.post('/fund_accounts', data);
             
             // Save fund_account_id to employee for future payouts
@@ -93,7 +116,7 @@ class RazorpayService {
             }
 
             const data = {
-                account_number: process.env.RAZORPAYX_ACCOUNT_NUMBER, // Your RazorpayX business account
+                account_number: process.env.RAZORPAYX_ACCOUNT_NUMBER || "mock_account", // Your RazorpayX business account
                 fund_account_id: employee.razorpayFundAccountId,
                 amount: transaction.amount * 100, // Razorpay uses paise
                 currency: "INR",
@@ -106,6 +129,31 @@ class RazorpayService {
                     employee_id: employee.employeeId
                 }
             };
+
+            if (this.isMockMode()) {
+                console.log('[MOCK MODE] Processing Payout for amount:', transaction.amount);
+                const mockPayoutId = `pout_${Math.random().toString(36).substr(2, 9)}`;
+                transaction.razorpayPayoutId = mockPayoutId;
+                transaction.status = 'queued'; // In real life, webhooks update this to 'processed'
+                transaction.razorpayResponse = { id: mockPayoutId, status: 'queued' };
+                await transaction.save();
+
+                // Auto-trigger the webhook success flow in mock mode after 3 seconds to complete the demo flow
+                setTimeout(async () => {
+                    try {
+                        const axios = require('axios');
+                        console.log('[MOCK MODE] Auto-triggering webhook success for payout:', mockPayoutId);
+                        await axios.post('http://localhost:5001/api/payouts/webhook', {
+                            event: 'payout.processed',
+                            payload: { payout: { entity: { id: mockPayoutId } } }
+                        });
+                    } catch (e) {
+                        console.error('[MOCK MODE] Auto-webhook failed', e.message);
+                    }
+                }, 3000);
+
+                return transaction.razorpayResponse;
+            }
 
             const response = await razorpayClient.post('/payouts', data);
             

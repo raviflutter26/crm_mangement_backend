@@ -15,7 +15,7 @@ const errorHandler = (err, req, res, next) => {
 
     // Mongoose duplicate key
     if (err.code === 11000) {
-        const field = Object.keys(err.keyValue)[0];
+        const field = err.keyValue ? Object.keys(err.keyValue)[0] : 'field';
         error.message = `Duplicate value for '${field}'. Please use another value.`;
         return res.status(400).json({ success: false, message: error.message });
     }
@@ -43,6 +43,7 @@ const errorHandler = (err, req, res, next) => {
     res.status(err.statusCode || 500).json({
         success: false,
         message: error.message || 'Internal Server Error',
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
 };
 

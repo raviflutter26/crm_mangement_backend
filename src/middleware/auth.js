@@ -52,6 +52,13 @@ const authenticate = async (req, res, next) => {
  */
 const authorize = (...roles) => {
     return (req, res, next) => {
+        if (!req.user || !req.user.role) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. User role not found.',
+            });
+        }
+
         const allowedRolesLower = roles.map(r => String(r).toLowerCase());
         const userRoleLower = String(req.user.role).toLowerCase();
 

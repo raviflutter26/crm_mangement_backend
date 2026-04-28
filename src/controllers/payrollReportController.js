@@ -97,6 +97,49 @@ exports.generateReport = async (req, res) => {
                 Basic: e.salary?.basic,
                 HRA: e.salary?.hra
             }));
+        } else if (reportName === 'PF Challan') {
+            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId panNumber statutory');
+            columns = ['UAN', 'Member Name', 'Gross Wages', 'EPF Wages', 'EPS Wages', 'EDLI Wages', 'EPF Contrib Remitted', 'EPS Contrib Remitted', 'EPF EPS Diff', 'NCP Days'];
+            csvData = payrolls.map(p => {
+                const epfWages = p.earnings?.basic || 0;
+                const pfDeduction = p.deductions?.pf || 0;
+                const epsContrib = p.employerContributions?.eps || 0;
+                const ncpDays = (p.workingDays || 30) - (p.presentDays || 30);
+                
+                return {
+                    'UAN': p.employee?.statutory?.pf?.uanNumber || '',
+                    'Member Name': `${p.employee?.firstName} ${p.employee?.lastName}`,
+                    'Gross Wages': p.grossEarnings || 0,
+                    'EPF Wages': epfWages,
+                    'EPS Wages': epfWages,
+                    'EDLI Wages': epfWages,
+                    'EPF Contrib Remitted': pfDeduction,
+                    'EPS Contrib Remitted': epsContrib,
+                    'EPF EPS Diff': Math.max(0, pfDeduction - epsContrib),
+                    'NCP Days': ncpDays > 0 ? ncpDays : 0
+                };
+            });
+        } else if (reportName === 'ESI Challan') {
+            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId statutory');
+            columns = ['IP Number', 'IP Name', 'No of Days Worked', 'Total Monthly Wages', 'Employee Contrib', 'Employer Contrib'];
+            csvData = payrolls.map(p => ({
+                'IP Number': p.employee?.statutory?.esi?.esiNumber || '',
+                'IP Name': `${p.employee?.firstName} ${p.employee?.lastName}`,
+                'No of Days Worked': p.presentDays || 0,
+                'Total Monthly Wages': p.grossEarnings || 0,
+                'Employee Contrib': p.deductions?.esi || 0,
+                'Employer Contrib': p.employerContributions?.esi || 0
+            }));
+        } else if (reportName === 'TDS Report') {
+            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId panNumber');
+            columns = ['EmployeeID', 'PAN', 'Name', 'Gross Salary', 'TDS Deducted'];
+            csvData = payrolls.map(p => ({
+                'EmployeeID': p.employee?.employeeId,
+                'PAN': p.employee?.panNumber || '',
+                'Name': `${p.employee?.firstName} ${p.employee?.lastName}`,
+                'Gross Salary': p.grossEarnings || 0,
+                'TDS Deducted': p.deductions?.tds || 0
+            }));
         } else {
             // Mock data for other reports
             columns = ['Date', 'Category', 'Description', 'Amount'];

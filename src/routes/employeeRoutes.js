@@ -18,4 +18,7 @@ router.route('/:id')
     .put(authorize('admin', 'hr'), employeeController.updateEmployee)
     .delete(authorize('admin'), employeeController.deleteEmployee);
 
+router.put('/:id/bank', authorize('admin', 'hr'), employeeController.updateBankDetails);
+router.put('/:id/salary-structure', authorize('admin', 'hr'), employeeController.updateSalaryStructure);
+
 module.exports = router;
