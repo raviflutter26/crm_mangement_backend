@@ -9,7 +9,8 @@ const { calculateSalaryBreakdown } = require('../utils/taxCalculator');
 // Get all payroll runs
 exports.getPayrollRuns = async (req, res, next) => {
     try {
-        const runs = await PayrollRun.find({})
+        const orgId = req.user?.organizationId;
+        const runs = await PayrollRun.find({ organizationId: orgId })
             .populate('initiatedBy', 'name email')
             .populate('approvedBy', 'name email')
             .sort('-year -month');
@@ -20,11 +21,12 @@ exports.getPayrollRuns = async (req, res, next) => {
 // Get single payroll run with details
 exports.getPayrollRunById = async (req, res, next) => {
     try {
-        const run = await PayrollRun.findById(req.params.id)
+        const orgId = req.user?.organizationId;
+        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId })
             .populate('payrollRecords')
             .populate('initiatedBy', 'name email')
             .populate('approvedBy', 'name email');
-        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found.' });
+        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
 
         // Populate employee details in payroll records
         const records = await Payroll.find({ _id: { $in: run.payrollRecords } })
@@ -38,22 +40,21 @@ exports.getPayrollRunById = async (req, res, next) => {
 exports.initiatePayrollRun = async (req, res, next) => {
     try {
         const { month, year } = req.body;
-        console.log(`🚀 Initiating Payroll Run for ${month}/${year}`);
-        
-        if (!month || !year) return res.status(400).json({ success: false, message: 'Month and year are required.' });
+        const orgId = req.user?.organizationId;
+        if (!orgId) return res.status(400).json({ success: false, message: 'Organization context is missing.' });
 
         // Check for existing run
-        const existing = await PayrollRun.findOne({ month: parseInt(month), year: parseInt(year) });
+        const existing = await PayrollRun.findOne({ month: parseInt(month), year: parseInt(year), organizationId: orgId });
         if (existing) return res.status(400).json({ success: false, message: `Payroll run already exists for ${month}/${year}. RunID: ${existing.runId}` });
 
         // Get statutory config
-        let config = await StatutoryConfig.findOne({});
+        let config = await StatutoryConfig.findOne({ organizationId: orgId });
         if (!config) {
-            config = await StatutoryConfig.create({ companyId: req.user?.companyId || new mongoose.Types.ObjectId() });
+            config = await StatutoryConfig.create({ organizationId: orgId });
         }
 
-        // Get all active employees
-        const employees = await Employee.find({ status: 'Active' });
+        // Get all active employees in THIS organization
+        const employees = await Employee.find({ status: 'Active', organizationId: orgId });
         if (employees.length === 0) return res.status(400).json({ success: false, message: 'No active employees found.' });
 
         // Calculate working days in the month
@@ -71,6 +72,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
             status: 'processing',
             totalEmployees: employees.length,
             initiatedBy: req.user?._id,
+            organizationId: orgId,
         });
 
         const payrollRecords = [];
@@ -101,6 +103,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
             // Create individual payroll record
             const payrollRecord = await Payroll.create({
                 employee: emp._id,
+                organizationId: orgId,
                 month: parseInt(month),
                 year: parseInt(year),
                 earnings: {
@@ -170,8 +173,9 @@ exports.initiatePayrollRun = async (req, res, next) => {
 // Approve payroll run
 exports.approvePayrollRun = async (req, res, next) => {
     try {
-        const run = await PayrollRun.findById(req.params.id);
-        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found.' });
+        const orgId = req.user?.organizationId;
+        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status !== 'review') return res.status(400).json({ success: false, message: `Cannot approve a run with status '${run.status}'.` });
 
         run.status = 'approved';
@@ -186,8 +190,9 @@ exports.approvePayrollRun = async (req, res, next) => {
 // Mark payroll as paid
 exports.markAsPaid = async (req, res, next) => {
     try {
-        const run = await PayrollRun.findById(req.params.id);
-        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found.' });
+        const orgId = req.user?.organizationId;
+        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status !== 'approved') return res.status(400).json({ success: false, message: 'Run must be approved first.' });
 
         run.status = 'paid';
@@ -208,8 +213,9 @@ exports.markAsPaid = async (req, res, next) => {
 // Delete payroll run
 exports.deletePayrollRun = async (req, res, next) => {
     try {
-        const run = await PayrollRun.findById(req.params.id);
-        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found.' });
+        const orgId = req.user?.organizationId;
+        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status === 'paid') return res.status(400).json({ success: false, message: 'Cannot delete a paid payroll run.' });
 
         // Delete individual payroll records

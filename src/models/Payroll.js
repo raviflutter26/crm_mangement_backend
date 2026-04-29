@@ -7,6 +7,11 @@ const payrollSchema = new mongoose.Schema(
             ref: 'Employee',
             required: true,
         },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: true,
+        },
         month: {
             type: Number,
             required: true,
@@ -101,7 +106,7 @@ const payrollSchema = new mongoose.Schema(
     }
 );
 
-payrollSchema.index({ employee: 1, month: 1, year: 1 }, { unique: true });
+payrollSchema.index({ employee: 1, month: 1, year: 1, organizationId: 1 }, { unique: true });
 
 // Calculate totals before saving
 payrollSchema.pre('save', async function () {

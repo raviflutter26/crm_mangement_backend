@@ -9,7 +9,8 @@ exports.getPayroll = async (req, res, next) => {
     try {
         const { page = 1, limit = 20, employee, month, year, status } = req.query;
 
-        const query = {};
+        const orgId = req.user?.organizationId;
+        const query = { organizationId: orgId };
         if (employee) query.employee = employee;
         if (month) query.month = parseInt(month);
         if (year) query.year = parseInt(year);
@@ -39,9 +40,10 @@ exports.getPayroll = async (req, res, next) => {
  */
 exports.getPayrollById = async (req, res, next) => {
     try {
-        const record = await Payroll.findById(req.params.id)
+        const orgId = req.user?.organizationId;
+        const record = await Payroll.findOne({ _id: req.params.id, organizationId: orgId })
             .populate('employee', 'firstName lastName employeeId department designation bankDetails');
-        if (!record) return res.status(404).json({ success: false, message: 'Payroll record not found.' });
+        if (!record) return res.status(404).json({ success: false, message: 'Payroll record not found for your organization.' });
         res.status(200).json({ success: true, data: record });
     } catch (error) {
         next(error);
@@ -54,7 +56,8 @@ exports.getPayrollById = async (req, res, next) => {
  */
 exports.createPayroll = async (req, res, next) => {
     try {
-        const record = await Payroll.create(req.body);
+        const orgId = req.user?.organizationId;
+        const record = await Payroll.create({ ...req.body, organizationId: orgId });
         res.status(201).json({ success: true, data: record });
     } catch (error) {
         next(error);
@@ -67,11 +70,16 @@ exports.createPayroll = async (req, res, next) => {
  */
 exports.updatePayroll = async (req, res, next) => {
     try {
-        const record = await Payroll.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
-        if (!record) return res.status(404).json({ success: false, message: 'Payroll record not found.' });
+        const orgId = req.user?.organizationId;
+        const record = await Payroll.findOneAndUpdate(
+            { _id: req.params.id, organizationId: orgId },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+            }
+        );
+        if (!record) return res.status(404).json({ success: false, message: 'Payroll record not found for your organization.' });
         res.status(200).json({ success: true, data: record });
     } catch (error) {
         next(error);
@@ -88,8 +96,9 @@ exports.getPayrollSummary = async (req, res, next) => {
         const currentMonth = month || new Date().getMonth() + 1;
         const currentYear = year || new Date().getFullYear();
 
+        const orgId = req.user?.organizationId;
         const summary = await Payroll.aggregate([
-            { $match: { month: parseInt(currentMonth), year: parseInt(currentYear) } },
+            { $match: { month: parseInt(currentMonth), year: parseInt(currentYear), organizationId: orgId } },
             {
                 $group: {
                     _id: null,

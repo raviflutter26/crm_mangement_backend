@@ -4,5 +4,6 @@ const dashboardController = require('../controllers/dashboardController');
 const { authenticate } = require('../middleware/auth');
 
 router.get('/', authenticate, dashboardController.getDashboard);
+router.get('/analytics', authenticate, dashboardController.getAnalytics);
 
 module.exports = router;

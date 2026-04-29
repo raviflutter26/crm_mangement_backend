@@ -36,6 +36,11 @@ const payrollRunSchema = new mongoose.Schema(
             default: 'bank_transfer',
         },
         notes: { type: String, default: '' },
+        organizationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Organization',
+            required: true,
+        },
     },
     { timestamps: true }
 );
@@ -48,6 +53,6 @@ payrollRunSchema.pre('save', async function () {
     }
 });
 
-payrollRunSchema.index({ month: 1, year: 1 }, { unique: true });
+payrollRunSchema.index({ month: 1, year: 1, organizationId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PayrollRun', payrollRunSchema);
