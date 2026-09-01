@@ -1,7 +1,7 @@
 const axios = require('axios');
 const BankDetail = require('../models/BankDetail');
 const PayoutTransaction = require('../models/PayoutTransaction');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 
 // Using axios as a fallback if Razorpay SDK isn't available
 const RAZORPAYX_BASE_URL = 'https://api.razorpay.com/v1';
@@ -110,7 +110,7 @@ class RazorpayService {
      */
     static async processPayout(transaction) {
         try {
-            const employee = await Employee.findById(transaction.employeeId);
+            const employee = await User.findById(transaction.employeeId);
             if (!employee.razorpayFundAccountId) {
                 throw new Error(`Fund account not set for employee ${employee.employeeId}`);
             }

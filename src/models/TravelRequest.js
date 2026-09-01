@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const travelRequestSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     site: { type: String, required: true },
     type: { type: String, enum: ['Site Visit', 'Material Pickup', 'Client Meeting', 'Training', 'Other'], default: 'Site Visit' },
     purpose: { type: String },

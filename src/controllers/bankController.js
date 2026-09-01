@@ -1,5 +1,5 @@
 const axios = require('axios');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 
 /**
  * @desc    Fetch Bank details from IFSC Code
@@ -54,7 +54,7 @@ exports.updateBankDetails = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Invalid IFSC format' });
         }
 
-        const employee = await Employee.findById(employeeId);
+        const employee = await User.findById(employeeId);
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }

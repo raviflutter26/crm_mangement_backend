@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const jobCardSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     site: { type: String, required: true },
     task: { type: String, required: true },
     description: { type: String },

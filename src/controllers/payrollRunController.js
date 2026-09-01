@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 const PayrollRun = require('../models/PayrollRun');
 const Payroll = require('../models/Payroll');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 const StatutoryConfig = require('../models/StatutoryConfig');
 const { calculateSalaryBreakdown } = require('../utils/taxCalculator');
+const { logAction } = require('../utils/auditLogger');
 
 // Get all payroll runs
 exports.getPayrollRuns = async (req, res, next) => {
@@ -54,7 +55,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
         }
 
         // Get all active employees in THIS organization
-        const employees = await Employee.find({ status: 'Active', organizationId: orgId });
+        const employees = await User.find({ status: 'Active', organizationId: orgId });
         if (employees.length === 0) return res.status(400).json({ success: false, message: 'No active employees found.' });
 
         // Calculate working days in the month
@@ -159,6 +160,12 @@ exports.initiatePayrollRun = async (req, res, next) => {
         payrollRun.status = 'review';
         await payrollRun.save();
 
+        await logAction(req.user?._id, 'run_payroll', 'Payroll', {
+            message: `Payroll run ${payrollRun.runId} initiated for ${employees.length} employee(s) (${month}/${year})`,
+            entity: 'PayrollRun',
+            entityId: payrollRun._id.toString(),
+        }, req);
+
         res.status(201).json({ success: true, data: payrollRun, message: `Payroll processed for ${employees.length} employees.` });
     } catch (error) { 
         console.error('❌ Payroll Run Error:', error);
@@ -183,7 +190,36 @@ exports.approvePayrollRun = async (req, res, next) => {
         run.approvedAt = new Date();
         await run.save();
 
+        await logAction(req.user?._id, 'approve_payroll', 'Payroll', {
+            message: `Payroll run ${run.runId} approved`,
+            entity: 'PayrollRun',
+            entityId: run._id.toString(),
+        }, req);
+
         res.status(200).json({ success: true, data: run, message: 'Payroll run approved.' });
+    } catch (error) { next(error); }
+};
+
+// Lock an approved payroll run — freezes it for disbursement
+exports.lockPayrollRun = async (req, res, next) => {
+    try {
+        const orgId = req.user?.organizationId;
+        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
+        if (run.status !== 'approved') return res.status(400).json({ success: false, message: `Cannot lock a run with status '${run.status}'. It must be approved first.` });
+
+        run.status = 'locked';
+        run.lockedBy = req.user?._id;
+        run.lockedAt = new Date();
+        await run.save();
+
+        await logAction(req.user?._id, 'lock_payroll', 'Payroll', {
+            message: `Payroll run ${run.runId} locked for disbursement`,
+            entity: 'PayrollRun',
+            entityId: run._id.toString(),
+        }, req);
+
+        res.status(200).json({ success: true, data: run, message: 'Payroll run locked.' });
     } catch (error) { next(error); }
 };
 

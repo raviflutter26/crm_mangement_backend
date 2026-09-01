@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const supportTicketSchema = new mongoose.Schema({
     ticketId: { type: String, trim: true },
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     subject: { type: String, required: true, trim: true },
     description: { type: String, trim: true },

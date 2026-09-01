@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const timesheetSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     weekStart: { type: Date, required: true },
     weekEnd: { type: Date, required: true },
     totalHours: { type: Number, default: 0 },

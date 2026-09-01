@@ -1,5 +1,5 @@
 const StatutoryConfig = require('../models/StatutoryConfig');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const { calculateEPF } = require('../utils/statutoryCalc');
 
 /**
@@ -139,7 +139,7 @@ exports.updateBonusConfig = async (req, res) => {
  */
 exports.getEmployeeStatutory = async (req, res) => {
     try {
-        const employee = await Employee.findById(req.params.employeeId).select('statutory');
+        const employee = await User.findById(req.params.employeeId).select('statutory');
         if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
         res.status(200).json({ success: true, data: employee.statutory });
     } catch (error) {
@@ -152,7 +152,7 @@ exports.getEmployeeStatutory = async (req, res) => {
  */
 exports.updateEmployeeStatutory = async (req, res) => {
     try {
-        const employee = await Employee.findByIdAndUpdate(
+        const employee = await User.findByIdAndUpdate(
             req.params.employeeId,
             { $set: { statutory: req.body } },
             { new: true }

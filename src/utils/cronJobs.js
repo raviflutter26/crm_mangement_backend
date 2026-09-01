@@ -1,7 +1,7 @@
 const nodeCron = require('node-cron');
 const LeavePolicy = require('../models/LeavePolicy');
 const LeaveBalance = require('../models/LeaveBalance');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 
 /**
  * Monthly Accrual: Credits leaves on the 1st of every month.
@@ -17,7 +17,7 @@ const runMonthlyAccrual = async () => {
 
         for (const policy of policies) {
             // Find all employees in this organization
-            const employees = await Employee.find({ organizationId: policy.organizationId, status: 'Active' });
+            const employees = await User.find({ organizationId: policy.organizationId, status: 'Active' });
 
             for (const emp of employees) {
                 // Get or create balance

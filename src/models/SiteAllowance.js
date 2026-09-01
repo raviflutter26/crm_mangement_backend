@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const siteAllowanceSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, enum: ['Site Daily Allowance', 'Night Shift Allowance', 'Hazard Pay', 'Remote Area Allowance', 'Other'], default: 'Site Daily Allowance' },
     site: { type: String, required: true },
     days: { type: Number, default: 1 },

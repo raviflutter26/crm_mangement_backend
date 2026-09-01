@@ -11,7 +11,7 @@ const assetSchema = new mongoose.Schema({
     purchaseValue: { type: Number, default: 0 },
     currentValue: { type: Number, default: 0 },
     warrantyExpiry: { type: Date },
-    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     assignedToName: { type: String, trim: true },
     assignedDate: { type: Date },
     status: { type: String, enum: ['available', 'assigned', 'under-repair', 'retired', 'lost'], default: 'available' },

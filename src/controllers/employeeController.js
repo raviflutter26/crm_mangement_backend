@@ -1,6 +1,5 @@
-const mongoose = require('mongoose');
-const Employee = require('../models/Employee');
 const User = require('../models/User');
+const Organization = require('../models/Organization');
 const zohoPeopleService = require('../services/zohoPeopleService');
 const { logAction } = require('../utils/auditLogger');
 const { sendEmail } = require('../services/emailService');
@@ -45,25 +44,24 @@ exports.getEmployees = async (req, res, next) => {
 
         // Role-based filtering for Managers (within their organization)
         if (req.user && req.user.role.toLowerCase() === 'manager') {
-            const mgrEmp = await Employee.findOne({ email: req.user.email, organizationId: req.user.organizationId });
-            if (mgrEmp && mgrEmp.department) {
-                query.department = mgrEmp.department;
-            } else if (mgrEmp) {
+            if (req.user.department) {
+                query.department = req.user.department;
+            } else {
                 query.$or = (query.$or || []).concat([
-                    { reportingManager: mgrEmp._id },
-                    { _id: mgrEmp._id }
+                    { reportingManager: req.user._id },
+                    { _id: req.user._id }
                 ]);
             }
         }
 
-        const employees = await Employee.find(query)
+        const employees = await User.find(query)
             .populate('reportingManager', 'firstName lastName role designation employeeId')
             .populate('shift', 'name startTime endTime')
             .sort(sort)
             .skip((page - 1) * limit)
             .limit(parseInt(limit));
 
-        const total = await Employee.countDocuments(query);
+        const total = await User.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -86,7 +84,7 @@ exports.getEmployees = async (req, res, next) => {
  */
 exports.getEmployee = async (req, res, next) => {
     try {
-        const employee = await Employee.findById(req.params.id)
+        const employee = await User.findById(req.params.id)
             .populate('reportingManager', 'firstName lastName role designation employeeId')
             .populate('shift', 'name startTime endTime');
         if (!employee) {
@@ -103,11 +101,8 @@ exports.getEmployee = async (req, res, next) => {
  * @route   POST /api/employees
  */
 exports.createEmployee = async (req, res, next) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        const { 
+        const {
             firstName, lastName, email, phone, role = 'Employee', panNumber, uan, esiNumber, address 
         } = req.body;
 
@@ -167,71 +162,60 @@ exports.createEmployee = async (req, res, next) => {
             return res.status(400).json({ success: false, message: `Employee already exists (${field} matches existing record).` });
         }
 
-        // Check Employees collection
-        const employeeExists = await Employee.findOne(duplicateQuery);
-        if (employeeExists) {
-            let field = 'Email';
-            if (employeeExists.panNumber === panNumber.toUpperCase()) field = 'PAN';
-            if (employeeExists.phone === phone) field = 'Phone';
-            return res.status(400).json({ success: false, message: `Employee already registered (${field} matches existing record).` });
+        // 3.5 Enforce the organization's plan employee limit
+        const organizationId = req.body.organizationId || req.user?.organizationId;
+        if (organizationId) {
+            const org = await Organization.findById(organizationId).select('maxEmployees planType');
+            if (org && org.maxEmployees) {
+                const currentEmployeeCount = await User.countDocuments({ organizationId });
+                if (currentEmployeeCount >= org.maxEmployees) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Employee limit reached for the ${org.planType} plan (${org.maxEmployees} employees). Upgrade the plan to add more employees.`
+                    });
+                }
+            }
         }
 
-        // 3. Create Employee within transaction
-        const employee = new Employee({
-            ...req.body,
-            email: email.toLowerCase(),
-            panNumber: panNumber.toUpperCase()
-        });
-        await employee.save({ session });
-
-        // 4. Create associated User within transaction
-        const userData = {
-            firstName: firstName,
-            lastName: lastName,
+        // 3. Create the employee's User record
+        const { sendWelcomeEmail: shouldSendWelcomeEmail = true, ...employeeFields } = req.body;
+        const newUser = new User({
+            ...employeeFields,
             email: email.toLowerCase(),
             panNumber: panNumber.toUpperCase(),
-            organizationId: req.body.organizationId || req.user?.organizationId,
-            password: null, // Force null to trigger "Set Password" flow
             role: role,
-            department: req.body.department || null,
-            designation: req.body.designation || null,
+            password: null, // Force null to trigger "Set Password" flow
             isActive: true,
-            isFirstLogin: true
-        };
+            isFirstLogin: true,
+            isPasswordSet: false,
+            organizationId: req.body.organizationId || req.user?.organizationId,
+        });
+        await newUser.save();
 
-        const newUser = new User(userData);
-        await newUser.save({ session });
+        // Audit log
+        await logAction(req.user?._id, 'Employee Created', 'Employees', { employeeId: newUser.employeeId, email: newUser.email, pan: newUser.panNumber }, req);
 
-        // Audit log (outside session but part of flow)
-        await logAction(req.user?._id, 'Employee Created', 'Employees', { employeeId: employee.employeeId, email: employee.email, pan: employee.panNumber }, req);
-
-        // 5. Send Welcome Email
-        try {
-            await sendEmail({
-                to: email,
-                subject: `Welcome to ${process.env.COMPANY_NAME || 'Ravi Zoho HRMS'}!`,
-                template: 'welcomeEmployee',
-                data: {
-                    employeeName: `${firstName} ${lastName}`,
-                    companyName: process.env.COMPANY_NAME || 'Ravi Zoho HRMS',
-                    loginUrl: `${process.env.WEBSITE_URL}/login`,
-                    employeeId: employee.employeeId
-                }
-            });
-        } catch (emailErr) {
-            console.error('Email sending failed during employee creation:', emailErr.message);
-            // We don't roll back the whole transaction for email failures
+        // 4. Send Welcome Email (unless explicitly opted out)
+        if (shouldSendWelcomeEmail !== false) {
+            try {
+                await sendEmail({
+                    to: email,
+                    subject: `Welcome to ${process.env.COMPANY_NAME || 'Ravi Zoho HRMS'}!`,
+                    template: 'welcomeEmployee',
+                    data: {
+                        employeeName: `${firstName} ${lastName}`,
+                        companyName: process.env.COMPANY_NAME || 'Ravi Zoho HRMS',
+                        loginUrl: `${process.env.WEBSITE_URL}/login`,
+                        employeeId: newUser.employeeId
+                    }
+                });
+            } catch (emailErr) {
+                console.error('Email sending failed during employee creation:', emailErr.message);
+            }
         }
 
-        // 6. Commit Transaction
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(201).json({ success: true, data: employee });
+        res.status(201).json({ success: true, data: newUser });
     } catch (error) {
-        // 7. Abort Transaction on failure
-        await session.abortTransaction();
-        session.endSession();
         next(error);
     }
 };
@@ -241,12 +225,9 @@ exports.createEmployee = async (req, res, next) => {
  * @route   PUT /api/employees/:id
  */
 exports.updateEmployee = async (req, res, next) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        const { role, firstName, lastName, email, panNumber } = req.body;
-        
+        const { panNumber } = req.body;
+
         // 1. Validation for PAN if provided
         if (panNumber) {
             const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -254,66 +235,33 @@ exports.updateEmployee = async (req, res, next) => {
                 return res.status(400).json({ success: false, message: 'Invalid PAN format. Example: ABCDE1234F' });
             }
 
-            // Check if PAN exists in other records (Employee)
-            const panInEmployee = await Employee.findOne({ 
-                panNumber: panNumber.toUpperCase(), 
-                _id: { $ne: req.params.id } 
-            });
-            if (panInEmployee) {
-                return res.status(400).json({ success: false, message: 'PAN already exists in another employee record.' });
-            }
-
-            // Check if PAN exists in other records (User)
-            const panInUser = await User.findOne({ 
-                panNumber: panNumber.toUpperCase(), 
-                email: { $ne: email || (await Employee.findById(req.params.id))?.email } 
+            // Check if PAN exists in another record
+            const panInUser = await User.findOne({
+                panNumber: panNumber.toUpperCase(),
+                _id: { $ne: req.params.id }
             });
             if (panInUser) {
-                return res.status(400).json({ success: false, message: 'PAN already exists in another user record.' });
+                return res.status(400).json({ success: false, message: 'PAN already exists in another employee record.' });
             }
         }
 
-        const employee = await Employee.findByIdAndUpdate(req.params.id, {
+        const employee = await User.findByIdAndUpdate(req.params.id, {
             ...req.body,
             panNumber: panNumber ? panNumber.toUpperCase() : undefined
         }, {
             new: true,
             runValidators: true,
-            session
         });
 
         if (!employee) {
-            await session.abortTransaction();
             return res.status(404).json({ success: false, message: 'Employee not found.' });
-        }
-
-        // Sync with User role/name/department if email matches
-        if (role || firstName || lastName || req.body.department || req.body.designation || panNumber) {
-            let updatePayload = {};
-            if (role) updatePayload.role = role;
-            if (firstName) updatePayload.firstName = firstName;
-            if (lastName) updatePayload.lastName = lastName;
-            if (req.body.department !== undefined) updatePayload.department = req.body.department;
-            if (req.body.designation !== undefined) updatePayload.designation = req.body.designation;
-            if (panNumber) updatePayload.panNumber = panNumber.toUpperCase();
-
-            await User.findOneAndUpdate(
-                { email: email || employee.email },
-                updatePayload,
-                { session }
-            );
         }
 
         // Audit log
         await logAction(req.user?._id, 'Employee Updated', 'Employees', { id: employee._id, employeeId: employee.employeeId, email: employee.email }, req);
 
-        await session.commitTransaction();
-        session.endSession();
-
         res.status(200).json({ success: true, data: employee });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         next(error);
     }
 };
@@ -324,7 +272,7 @@ exports.updateEmployee = async (req, res, next) => {
  */
 exports.deleteEmployee = async (req, res, next) => {
     try {
-        const employee = await Employee.findByIdAndDelete(req.params.id);
+        const employee = await User.findByIdAndDelete(req.params.id);
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
         }
@@ -353,7 +301,7 @@ exports.getManagers = async (req, res, next) => {
             query.organizationId = req.user.organizationId;
         }
 
-        const managers = await Employee.find(query).select('firstName lastName email role department designation employeeId').sort({ firstName: 1 });
+        const managers = await User.find(query).select('firstName lastName email role department designation employeeId').sort({ firstName: 1 });
 
         res.status(200).json({
             success: true,
@@ -373,13 +321,34 @@ exports.syncFromZoho = async (req, res, next) => {
         const zohoEmployees = await zohoPeopleService.getEmployees();
         let synced = 0;
         let errors = 0;
+        let skipped = 0;
+
+        // Scope synced employees to an organization, and cap new inserts at its plan limit
+        // (existing records can still be refreshed). Admin/hr users are scoped to their own
+        // org; a superadmin has no organizationId of their own, so it must pass one explicitly
+        // to target a specific org (consistent with createEmployee's req.body.organizationId override).
+        const organizationId = req.body?.organizationId || req.user?.organizationId;
+        let remainingSlots = Infinity;
+        if (organizationId) {
+            const org = await Organization.findById(organizationId).select('maxEmployees');
+            if (org && org.maxEmployees) {
+                const currentEmployeeCount = await User.countDocuments({ organizationId });
+                remainingSlots = Math.max(org.maxEmployees - currentEmployeeCount, 0);
+            }
+        }
 
         // Process Zoho data (shape depends on actual API response)
         if (zohoEmployees && zohoEmployees.response && zohoEmployees.response.result) {
             const records = zohoEmployees.response.result;
             for (const record of records) {
                 try {
-                    await Employee.findOneAndUpdate(
+                    const existing = await User.findOne({ zohoRecordId: record.recordId });
+                    if (!existing && remainingSlots <= 0) {
+                        skipped++;
+                        continue;
+                    }
+
+                    await User.findOneAndUpdate(
                         { zohoRecordId: record.recordId },
                         {
                             zohoRecordId: record.recordId,
@@ -391,11 +360,13 @@ exports.syncFromZoho = async (req, res, next) => {
                             designation: record.Designation || null,
                             phone: record.Mobile || null,
                             dateOfJoining: record.Dateofjoining || null,
+                            organizationId: existing ? existing.organizationId : organizationId,
                             syncedFromZoho: true,
                             lastSyncedAt: new Date(),
                         },
                         { upsert: true, new: true }
                     );
+                    if (!existing) remainingSlots--;
                     synced++;
                 } catch (err) {
                     errors++;
@@ -406,8 +377,8 @@ exports.syncFromZoho = async (req, res, next) => {
 
         res.status(200).json({
             success: true,
-            message: `Sync complete. Synced: ${synced}, Errors: ${errors}`,
-            data: { synced, errors },
+            message: `Sync complete. Synced: ${synced}, Skipped (plan limit reached): ${skipped}, Errors: ${errors}`,
+            data: { synced, skipped, errors },
         });
     } catch (error) {
         next(error);
@@ -420,10 +391,10 @@ exports.syncFromZoho = async (req, res, next) => {
  */
 exports.getStats = async (req, res, next) => {
     try {
-        const totalEmployees = await Employee.countDocuments();
-        const activeEmployees = await Employee.countDocuments({ status: 'Active' });
-        const inactiveEmployees = await Employee.countDocuments({ status: 'Inactive' });
-        const departmentStats = await Employee.aggregate([
+        const totalEmployees = await User.countDocuments();
+        const activeEmployees = await User.countDocuments({ status: 'Active' });
+        const inactiveEmployees = await User.countDocuments({ status: 'Inactive' });
+        const departmentStats = await User.aggregate([
             { $group: { _id: '$department', count: { $sum: 1 } } },
             { $sort: { count: -1 } },
         ]);
@@ -448,9 +419,8 @@ exports.getStats = async (req, res, next) => {
  */
 exports.updateBankDetails = async (req, res, next) => {
     try {
-        const { accountNumber, ifsc, bankName, accountType, uan, pan } = req.body;
-        const Employee = require('../models/Employee');
-        const employee = await Employee.findById(req.params.id);
+        const { accountNumber, ifsc, bankName, uan, pan } = req.body;
+        const employee = await User.findById(req.params.id);
         
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -486,6 +456,12 @@ exports.updateBankDetails = async (req, res, next) => {
 
         await employee.save();
 
+        await logAction(req.user?._id, 'update_bank', 'Payroll', {
+            message: `Bank details updated for ${employee.firstName} ${employee.lastName}`,
+            entity: 'User',
+            entityId: employee._id.toString(),
+        }, req);
+
         res.status(200).json({ success: true, message: 'Bank details updated successfully', data: employee });
     } catch (error) {
         next(error);
@@ -499,8 +475,7 @@ exports.updateBankDetails = async (req, res, next) => {
 exports.updateSalaryStructure = async (req, res, next) => {
     try {
         const { basic, hra, da, ta, specialAllowance, lta, ctc } = req.body;
-        const Employee = require('../models/Employee');
-        const employee = await Employee.findById(req.params.id);
+        const employee = await User.findById(req.params.id);
         
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -510,11 +485,12 @@ exports.updateSalaryStructure = async (req, res, next) => {
         employee.salary.basic = Number(basic) || 0;
         employee.salary.hra = Number(hra) || 0;
         employee.salary.da = Number(da) || 0;
-        employee.salary.specialAllowance = (Number(specialAllowance) || 0) + (Number(ta) || 0) + (Number(lta) || 0); // combining allowances
-        employee.ctc = Number(ctc) || (employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.specialAllowance);
-        
+        employee.salary.ta = Number(ta) || 0;
+        employee.salary.specialAllowance = (Number(specialAllowance) || 0) + (Number(lta) || 0);
+        employee.ctc = Number(ctc) || (employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.ta + employee.salary.specialAllowance);
+
         // Calculate gross
-        employee.salary.grossSalary = employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.specialAllowance;
+        employee.salary.grossSalary = employee.salary.basic + employee.salary.hra + employee.salary.da + employee.salary.ta + employee.salary.specialAllowance;
 
         await employee.save();
 

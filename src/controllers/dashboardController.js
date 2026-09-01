@@ -1,8 +1,10 @@
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Payroll = require('../models/Payroll');
 const JobPosting = require('../models/JobPosting');
+const Project = require('../models/Project');
+const Incident = require('../models/Incident');
 
 /**
  * @desc    Get dashboard statistics
@@ -42,12 +44,8 @@ exports.getDashboard = async (req, res, next) => {
 
         // Check if user is an employee
         if (req.user && req.user.role === 'Employee') {
-            const employee = await Employee.findOne({ email: req.user.email })
+            const employee = await User.findById(req.user.id)
                 .populate('reportingManager', 'firstName lastName email designation');
-            
-            if (!employee) {
-                return res.status(404).json({ success: false, message: 'Employee profile not found' });
-            }
 
             // Attendance today
             const attendanceToday = await Attendance.findOne({ employee: employee._id, date: { $gte: today, $lt: tomorrow } });
@@ -92,7 +90,7 @@ exports.getDashboard = async (req, res, next) => {
         }
 
         // Admin / HR / Manager stats logic
-        let employeeQuery = {};
+        let employeeQuery = req.user.organizationId ? { organizationId: req.user.organizationId } : {};
         let attendanceQuery = { date: { $gte: startDate, $lte: endDate } };
         let leaveQuery = {};
         let payrollStatsQuery = filter === 'year' ? { year: currentYear } : { month: currentMonth, year: currentYear };
@@ -100,13 +98,12 @@ exports.getDashboard = async (req, res, next) => {
         let managerDept = null;
 
         if (req.user && req.user.role === 'Manager') {
-            const mgrEmp = await Employee.findOne({ email: req.user.email });
-            if (mgrEmp) {
-                managerDept = mgrEmp.department;
+            managerDept = req.user.department;
+            if (managerDept) {
                 // Get all employees in this department
-                const departmentEmps = await Employee.find({ department: managerDept }).select('_id');
+                const departmentEmps = await User.find({ department: managerDept }).select('_id');
                 const empIdsInDept = departmentEmps.map(e => e._id);
-                
+
                 employeeQuery.department = managerDept;
                 attendanceQuery.employee = { $in: empIdsInDept };
                 leaveQuery.employee = { $in: empIdsInDept };
@@ -115,11 +112,11 @@ exports.getDashboard = async (req, res, next) => {
             }
         }
 
-        const totalEmployees = await Employee.countDocuments(employeeQuery);
-        const activeEmployees = await Employee.countDocuments({ ...employeeQuery, status: 'Active' });
+        const totalEmployees = await User.countDocuments(employeeQuery);
+        const activeEmployees = await User.countDocuments({ ...employeeQuery, status: 'Active' });
         
         console.log(`📊 Dashboard Stats: Total=${totalEmployees}, Active=${activeEmployees}`);
-        const newEmployeesThisMonth = await Employee.countDocuments({
+        const newEmployeesThisMonth = await User.countDocuments({
             ...employeeQuery,
             createdAt: { $gte: new Date(`${currentYear}-${currentMonth}-01`) },
         });
@@ -164,7 +161,7 @@ exports.getDashboard = async (req, res, next) => {
             .sort('createdAt')
             .limit(5);
 
-        const recentHires = await Employee.find({ ...employeeQuery, status: 'Active' })
+        const recentHires = await User.find({ ...employeeQuery, status: 'Active' })
             .sort('-createdAt')
             .limit(5)
             .select('firstName lastName designation department status createdAt');
@@ -177,13 +174,27 @@ exports.getDashboard = async (req, res, next) => {
             { $group: { _id: null, totalPayroll: { $sum: '$netPay' }, pending: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'Pending'] }, 1, 0] } }, paid: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'Paid'] }, 1, 0] } } } },
         ]);
 
-        // Department distribution
-        const departmentDistribution = await Employee.aggregate([
-            { $match: { ...employeeQuery, status: 'Active' } },
+        const departmentDistribution = await User.aggregate([
+            { $match: employeeQuery },
             { $group: { _id: '$department', count: { $sum: 1 } } },
-            { $sort: { count: -1 } },
-            { $limit: 10 },
+            { $sort: { count: -1 } }
         ]);
+
+        // Projects & Sites
+        const projects = await Project.find({ organizationId: req.user.organizationId, status: 'In Progress' })
+            .limit(5)
+            .select('name status site');
+
+        // Incidents
+        const recentIncidents = await Incident.find({ organizationId: req.user.organizationId })
+            .sort('-createdAt')
+            .limit(3);
+        
+        const incidentStats = {
+            total: await Incident.countDocuments({ organizationId: req.user.organizationId }),
+            open: await Incident.countDocuments({ organizationId: req.user.organizationId, status: { $in: ['Reported', 'In-Progress'] } }),
+            closed: await Incident.countDocuments({ organizationId: req.user.organizationId, status: { $in: ['Resolved', 'Closed'] } })
+        };
 
         // Trends for charts (Always 7 days for attendance, 6 months for payroll)
         const sevenDaysAgo = new Date();
@@ -193,7 +204,7 @@ exports.getDashboard = async (req, res, next) => {
         // Separate query for trends to avoid being restricted by the 'today' filter
         let trendQuery = {};
         if (req.user && req.user.role === 'Manager') {
-            const departmentEmps = await Employee.find({ department: managerDept }).select('_id');
+            const departmentEmps = await User.find({ department: managerDept }).select('_id');
             trendQuery.employee = { $in: departmentEmps.map(e => e._id) };
         }
 
@@ -233,7 +244,10 @@ exports.getDashboard = async (req, res, next) => {
                 recentLeaves,
                 leaveApprovals,
                 recentHires,
-                openPositions
+                openPositions,
+                projects,
+                incidents: recentIncidents,
+                incidentStats
             },
         });
     } catch (error) {
@@ -257,8 +271,8 @@ exports.getAnalytics = async (req, res, next) => {
         }
 
         // 1. KPIs
-        const totalEmployees = await Employee.countDocuments(query);
-        const activeEmployees = await Employee.countDocuments({ ...query, status: 'Active' });
+        const totalEmployees = await User.countDocuments(query);
+        const activeEmployees = await User.countDocuments({ ...query, status: 'Active' });
         
         // Attendance Rate
         const checkedInToday = await Attendance.countDocuments({ 
@@ -289,7 +303,7 @@ exports.getAnalytics = async (req, res, next) => {
         }
 
         const hiringTrends = await Promise.all(last6Months.map(async (m) => {
-            const count = await Employee.countDocuments({
+            const count = await User.countDocuments({
                 ...query,
                 createdAt: {
                     $gte: new Date(m.year, m.monthNum - 1, 1),
@@ -322,7 +336,7 @@ exports.getAnalytics = async (req, res, next) => {
         }));
 
         // 4. Site Distribution
-        const locations = await Employee.aggregate([
+        const locations = await User.aggregate([
             { $match: { ...query, status: 'Active' } },
             { $group: { _id: '$location', count: { $sum: 1 } } },
             { $sort: { count: -1 } }

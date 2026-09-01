@@ -1,5 +1,5 @@
 const Permission = require('../models/Permission');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const permissionService = require('../services/permissionService');
 
 /**
@@ -13,8 +13,7 @@ exports.requestPermission = async (req, res, next) => {
         // 1. Identify Employee
         let employeeId = req.user.id;
         if (req.user.role === 'Employee') {
-            const emp = await Employee.findOne({ email: req.user.email }).populate('organizationId');
-            if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
+            const emp = await User.findById(req.user.id).populate('organizationId');
             employeeId = emp._id;
             req.orgId = emp.organizationId?._id;
         }
@@ -53,13 +52,10 @@ exports.requestPermission = async (req, res, next) => {
  */
 exports.getMyPermissions = async (req, res, next) => {
     try {
-        const emp = await Employee.findOne({ email: req.user.email });
-        if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
+        const history = await Permission.find({ employee: req.user._id }).sort({ requestedDate: -1 });
 
-        const history = await Permission.find({ employee: emp._id }).sort({ requestedDate: -1 });
-        
         const monthYear = new Date().toISOString().slice(0, 7);
-        const usage = await permissionService.getMonthlyUsage(emp._id, monthYear);
+        const usage = await permissionService.getMonthlyUsage(req.user._id, monthYear);
 
         res.status(200).json({ 
             success: true, 
@@ -105,11 +101,8 @@ exports.getTeamPermissions = async (req, res, next) => {
         
         // Role-based scoping
         if (req.user.role === 'Manager') {
-            const mgrEmp = await Employee.findOne({ email: req.user.email });
-            if (mgrEmp) {
-                const team = await Employee.find({ reportingManager: mgrEmp._id }).select('_id');
-                query.employee = { $in: team.map(e => e._id) };
-            }
+            const team = await User.find({ reportingManager: req.user._id }).select('_id');
+            query.employee = { $in: team.map(e => e._id) };
         } else if (req.user.role === 'Employee') {
             return res.status(200).json({ success: true, data: [] });
         }
@@ -134,11 +127,8 @@ exports.cancelPermission = async (req, res, next) => {
     try {
         const permission = await Permission.findById(req.params.id);
         if (!permission) return res.status(404).json({ success: false, message: 'Permission not found.' });
-        
-        const emp = await Employee.findOne({ email: req.user.email });
-        if (!emp) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
 
-        if (String(permission.employee) !== String(emp._id)) {
+        if (String(permission.employee) !== String(req.user._id)) {
             return res.status(403).json({ success: false, message: 'Not authorized to cancel this request.' });
         }
 

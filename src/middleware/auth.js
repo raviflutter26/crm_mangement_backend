@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const User = require('../models/User');
+const Session = require('../models/Session');
 
 /**
  * Authenticate JWT token middleware
@@ -35,6 +36,21 @@ const authenticate = async (req, res, next) => {
                 success: false,
                 message: 'User not found or inactive.',
             });
+        }
+
+        // Session revocation check — additive only. Tokens with no jti (issued before
+        // Session tracking existed, or by paths that don't set one) have no Session
+        // record to match and are treated as valid, exactly as before this feature.
+        if (decoded.jti) {
+            const session = await Session.findOne({ jti: decoded.jti }).select('revoked');
+            if (session && session.revoked) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'This session has been signed out. Please log in again.',
+                });
+            }
+            req.jti = decoded.jti;
+            Session.updateOne({ jti: decoded.jti }, { lastActiveAt: new Date() }).catch(() => {});
         }
 
         req.user = user;

@@ -1,5 +1,5 @@
 const Leave = require('../models/Leave');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const LeaveBalance = require('../models/LeaveBalance');
 const leaveService = require('../services/leaveService');
 const { sendEmail } = require('../services/emailService');
@@ -10,18 +10,18 @@ const { sendEmail } = require('../services/emailService');
  */
 exports.applyLeave = async (req, res, next) => {
     try {
-        const { leaveType, fromDate, toDate, reason, halfDay, documentUrl } = req.body;
-        
+        const { leaveType, startDate, endDate, reason, halfDay, documentUrl } = req.body;
+        const role = (req.user.role || '').toLowerCase();
+
         // 1. Resolve Employee & Org
         let employeeId = req.user.id;
         let employee;
-        if (req.user.role === 'Employee') {
-            employee = await Employee.findOne({ email: req.user.email }).populate('organizationId');
-            if (!employee) return res.status(404).json({ success: false, message: 'Employee profile not found.' });
+        if (role === 'employee') {
+            employee = await User.findById(req.user.id).populate('organizationId');
             employeeId = employee._id;
             req.orgId = employee.organizationId?._id;
         } else {
-            employee = await Employee.findById(req.body.employeeId).populate('organizationId');
+            employee = await User.findById(req.body.employeeId).populate('organizationId');
             employeeId = employee?._id;
             req.orgId = employee?.organizationId?._id;
         }
@@ -30,7 +30,7 @@ exports.applyLeave = async (req, res, next) => {
 
         // 2. Validate using Service (Policy & Balance check)
         const { totalDays, policy, balance } = await leaveService.validateLeaveRequest(
-            employeeId, req.orgId, { leaveType, fromDate, toDate }, employee
+            employeeId, req.orgId, { leaveType, fromDate: startDate, toDate: endDate }, employee
         );
 
         // 3. Create Request
@@ -38,8 +38,8 @@ exports.applyLeave = async (req, res, next) => {
             employee: employeeId,
             organizationId: req.orgId,
             leaveType,
-            startDate: new Date(fromDate),
-            endDate: new Date(toDate),
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
             totalDays,
             halfDay: halfDay || false,
             reason,
@@ -64,10 +64,10 @@ exports.getLeaves = async (req, res, next) => {
     try {
         const { page = 1, limit = 20, employee, status, leaveType } = req.query;
         const query = { organizationId: req.orgId || req.user.organizationId };
+        const role = (req.user.role || '').toLowerCase();
 
-        if (req.user.role === 'Employee') {
-            const emp = await Employee.findOne({ email: req.user.email });
-            query.employee = emp._id;
+        if (role === 'employee') {
+            query.employee = req.user._id;
         } else if (employee) {
             query.employee = employee;
         }
@@ -100,6 +100,13 @@ exports.updateLeaveStatus = async (req, res, next) => {
         const leave = await Leave.findById(req.params.id).populate('organizationId');
         if (!leave) return res.status(404).json({ success: false, message: 'Leave not found.' });
 
+        const role = (req.user.role || '').toLowerCase();
+        const leaveOrgId = String(leave.organizationId?._id || leave.organizationId || '');
+        const approverOrgId = String(req.user.organizationId || '');
+        if (role !== 'superadmin' && (!leaveOrgId || leaveOrgId !== approverOrgId)) {
+            return res.status(403).json({ success: false, message: 'Not authorized to update this leave request.' });
+        }
+
         const year = new Date(leave.startDate).getFullYear();
         const balance = await leaveService.getLeaveBalance(leave.employee, leave.organizationId, leave.leaveType, year);
 
@@ -127,7 +134,14 @@ exports.updateLeaveStatus = async (req, res, next) => {
 exports.getLeaveBalance = async (req, res, next) => {
     try {
         const employeeId = req.params.employeeId;
-        const employee = await Employee.findById(employeeId);
+        const employee = await User.findById(employeeId);
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+        const role = (req.user.role || '').toLowerCase();
+        if (role !== 'superadmin' && String(employee.organizationId || '') !== String(req.user.organizationId || '')) {
+            return res.status(403).json({ success: false, message: 'Not authorized to view this employee\'s leave balance.' });
+        }
+
         const year = parseInt(req.query.year) || new Date().getFullYear();
 
         const balances = await LeaveBalance.find({ employeeId, year });

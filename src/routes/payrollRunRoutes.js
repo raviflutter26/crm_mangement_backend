@@ -7,6 +7,7 @@ router.get('/', authenticate, ctrl.getPayrollRuns);
 router.get('/:id', authenticate, ctrl.getPayrollRunById);
 router.post('/initiate', authenticate, authorize('admin', 'hr'), ctrl.initiatePayrollRun);
 router.patch('/:id/approve', authenticate, authorize('admin'), ctrl.approvePayrollRun);
+router.post('/:id/lock', authenticate, authorize('admin'), ctrl.lockPayrollRun);
 router.patch('/:id/pay', authenticate, authorize('admin'), ctrl.markAsPaid);
 router.delete('/:id', authenticate, authorize('admin'), ctrl.deletePayrollRun);
 

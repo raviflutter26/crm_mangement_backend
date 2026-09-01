@@ -1,5 +1,5 @@
 const Expense = require('../models/Expense');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const { sendEmail } = require('../services/emailService');
 
 exports.getExpenses = async (req, res) => {
@@ -20,7 +20,7 @@ exports.createExpense = async (req, res) => {
         const doc = await Expense.create(req.body);
         
         // Notify for approval
-        const employee = await Employee.findById(doc.employee).populate('reportingManager');
+        const employee = await User.findById(doc.employee).populate('reportingManager');
         if (employee) {
             if (employee.reportingManager) {
                 await sendEmail({
@@ -34,7 +34,7 @@ exports.createExpense = async (req, res) => {
                     }
                 });
             } else {
-                const admins = await Employee.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
+                const admins = await User.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
                 for (const admin of admins) {
                     await sendEmail({
                         to: admin.email,

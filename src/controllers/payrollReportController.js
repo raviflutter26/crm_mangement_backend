@@ -1,6 +1,6 @@
 const PayrollReport = require('../models/PayrollReport');
 const Payroll = require('../models/Payroll');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 
 // Helper to generate CSV
 const generateCSV = (data, columns) => {
@@ -86,7 +86,7 @@ exports.generateReport = async (req, res) => {
                 Status: p.paymentStatus
             }));
         } else if (reportName === 'Compensation Details') {
-            const emps = await Employee.find(department && department !== 'All' ? { department } : {});
+            const emps = await User.find(department && department !== 'All' ? { department } : {});
             columns = ['EmployeeID', 'Name', 'Department', 'Designation', 'CTC', 'Basic', 'HRA'];
             csvData = emps.map(e => ({
                 EmployeeID: e.employeeId,

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const goalSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true },

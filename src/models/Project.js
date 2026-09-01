@@ -9,7 +9,7 @@ const projectSchema = new mongoose.Schema({
     startDate: { type: Date },
     endDate: { type: Date },
     budget: { type: Number, default: 0 },
-    manager: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     site: { type: String },
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
     isActive: { type: Boolean, default: true }

@@ -6,9 +6,9 @@ const trainingSchema = new mongoose.Schema({
     duration: { type: String },
     status: { type: String, enum: ['New', 'In-Progress', 'Completed', 'Expired'], default: 'New' },
     type: { type: String, enum: ['Safety', 'Technical', 'Compliance', 'Soft Skills', 'Other'], default: 'Technical' },
-    assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Employee' }],
+    assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     completedBy: [{
-        employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+        employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         completedDate: { type: Date },
         score: { type: Number }
     }],

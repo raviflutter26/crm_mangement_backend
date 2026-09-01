@@ -7,6 +7,24 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 
 /**
+ * @route GET /api/payouts/status
+ * @desc Summary counts of payout transactions for the org
+ */
+router.get('/status', authorize('Admin', 'HR'), payoutController.getStatus);
+
+/**
+ * @route GET /api/payouts/history
+ * @desc Full payout transaction history for the org
+ */
+router.get('/history', authorize('Admin', 'HR'), payoutController.getHistory);
+
+/**
+ * @route POST /api/payouts/:id/retry
+ * @desc Re-attempt a failed payout transaction
+ */
+router.post('/:id/retry', authorize('Admin', 'HR'), payoutController.retryPayout);
+
+/**
  * @route POST /api/payouts/initiate
  * @desc Trigger bulk salary payout for a payroll run
  */

@@ -1,4 +1,4 @@
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const Payroll = require('../models/Payroll');
 const PayrollRun = require('../models/PayrollRun');
 const PayoutTransaction = require('../models/PayoutTransaction');
@@ -57,7 +57,7 @@ class PayrollAutomationService {
      */
     static async initiateCalculations(month, year, initiatedBy) {
         // Logic similar to initiatePayrollRun in payrollRunController
-        const employees = await Employee.find({ status: 'Active' });
+        const employees = await User.find({ status: 'Active' });
         if (employees.length === 0) throw new Error('No active employees found');
 
         const daysInMonth = new Date(year, month, 0).getDate();

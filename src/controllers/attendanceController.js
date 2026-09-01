@@ -1,5 +1,5 @@
 const Attendance = require('../models/Attendance');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const Shift = require('../models/Shift');
 const Permission = require('../models/Permission');
 const ComplianceSettings = require('../models/ComplianceSettings');
@@ -8,7 +8,6 @@ const attendanceConfigService = require('../services/attendanceConfigService');
 const permissionService = require('../services/permissionService');
 const zohoPeopleService = require('../services/zohoPeopleService');
 const { sendEmail } = require('../services/emailService');
-const mongoose = require('mongoose');
 
 /**
  * @desc    Get all attendance records
@@ -18,22 +17,22 @@ exports.getAttendance = async (req, res, next) => {
     try {
         const { employeeId, startDate, endDate, status } = req.query;
         let query = {};
+        const role = (req.user.role || '').toLowerCase();
 
         // Security: Scoping based on role
-        const selfEmp = await Employee.findOne({ email: req.user.email });
-        
-        if (employeeId && (['admin', 'hr', 'superadmin', 'Admin', 'HR'].includes(req.user.role) || req.user.role === 'Manager')) {
-            // HR/Admin explicitly requesting someone specifically
+        if (employeeId && role === 'superadmin') {
+            // Platform-wide access
             query.employee = employeeId;
-        } else if (req.user.role === 'Employee' || !employeeId) {
-            // Default to SELF if no employeeId provided or if role is Employee
-            if (!selfEmp) {
-                // If it's a manager/HR with no employee profile, they have no personal attendance to show
-                if (req.user.role === 'Employee') return res.status(404).json({ success: false, message: 'Employee profile not found.' });
-                query.employee = new mongoose.Types.ObjectId(); // Search for dummy to return empty
-            } else {
-                query.employee = selfEmp._id;
+        } else if (employeeId && ['admin', 'hr', 'manager'].includes(role)) {
+            // HR/Admin/Manager explicitly requesting someone specifically — must be within their own organization
+            const targetEmployee = await User.findById(employeeId).select('organizationId');
+            if (!targetEmployee || String(targetEmployee.organizationId) !== String(req.user.organizationId)) {
+                return res.status(403).json({ success: false, message: 'Not authorized to view attendance for this employee' });
             }
+            query.employee = employeeId;
+        } else if (role === 'employee' || !employeeId) {
+            // Default to SELF if no employeeId provided or if role is Employee
+            query.employee = req.user._id;
         }
 
         if (startDate || endDate) {
@@ -67,14 +66,13 @@ exports.getAttendance = async (req, res, next) => {
 exports.checkIn = async (req, res, next) => {
     try {
         let { employeeId, source, latitude, longitude, deviceId, ipAddress } = req.body;
-        
-        // Resolve true Employee._id from session email for self-actions
-        const selfEmp = await Employee.findOne({ email: req.user.email });
-        if (selfEmp && (!employeeId || employeeId === req.user.id.toString() || employeeId === selfEmp._id.toString())) {
-            employeeId = selfEmp._id;
+
+        // Default to self for self-service check-ins
+        if (!employeeId || employeeId === req.user.id.toString()) {
+            employeeId = req.user._id;
         }
 
-        const employee = await Employee.findById(employeeId).populate('organizationId');
+        const employee = await User.findById(employeeId).populate('organizationId');
         if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
         const organizationId = employee.organizationId?._id;
@@ -177,44 +175,33 @@ exports.checkIn = async (req, res, next) => {
 exports.checkOut = async (req, res, next) => {
     try {
         let { employeeId, latitude, longitude } = req.body;
-        const originId = employeeId;
-        // Resolve true Employee._id from session email for self-actions
-        const selfEmp = await Employee.findOne({ email: req.user.email });
-        
-        // Build a list of all possible IDs that might have been used for this employee
-        let targetEmployeeIds = [];
-        if (selfEmp) targetEmployeeIds.push(selfEmp._id);
-        if (originId) targetEmployeeIds.push(originId);
-        if (req.user.id) targetEmployeeIds.push(req.user.id);
-        
-        // Unique IDs only, filter out any undefined/null
-        targetEmployeeIds = [...new Set(targetEmployeeIds.filter(id => id).map(id => id.toString()))];
+        const targetEmployeeId = employeeId || req.user.id;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        // Try to find record for today first among any of these IDs
-        let record = await Attendance.findOne({ 
-            employee: { $in: targetEmployeeIds }, 
-            date: { $gte: today, $lt: tomorrow } 
+        // Try to find today's record first
+        let record = await Attendance.findOne({
+            employee: targetEmployeeId,
+            date: { $gte: today, $lt: tomorrow }
         }).populate('organizationId');
-        
-        // If no record for today has an open session, look for the most recent open session from any day for any of these IDs
+
+        // If no record for today has an open session, look for the most recent open session from any day
         if (!record || !record.sessions.some(s => !s.checkOut)) {
-            const openRecord = await Attendance.findOne({ 
-                employee: { $in: targetEmployeeIds }, 
-                "sessions.checkOut": null 
+            const openRecord = await Attendance.findOne({
+                employee: targetEmployeeId,
+                "sessions.checkOut": null
             }).sort({ date: -1 }).populate('organizationId');
-            
+
             if (openRecord) record = openRecord;
         }
 
         if (!record || !record.sessions || record.sessions.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Must check in first. (System tried mapping your profile across IDs: ${targetEmployeeIds.join(', ')})` 
+            return res.status(400).json({
+                success: false,
+                message: 'Must check in first.'
             });
         }
 
@@ -278,18 +265,15 @@ exports.getTodaySummary = async (req, res, next) => {
         let attQuery = { date: { $gte: today, $lt: tomorrow } };
 
         if (req.user && req.user.role === 'Manager') {
-            const mgrEmp = await Employee.findOne({ email: req.user.email });
-            if (mgrEmp) {
-                const allowedEmps = await Employee.find({ 
-                    $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
-                }).select('_id');
-                const allowedIds = allowedEmps.map(e => e._id);
-                userQuery._id = { $in: allowedIds };
-                attQuery.employee = { $in: allowedIds };
-            }
+            const allowedEmps = await User.find({
+                $or: [{ reportingManager: req.user._id }, { _id: req.user._id }]
+            }).select('_id');
+            const allowedIds = allowedEmps.map(e => e._id);
+            userQuery._id = { $in: allowedIds };
+            attQuery.employee = { $in: allowedIds };
         }
 
-        const totalEmployees = await Employee.countDocuments(userQuery);
+        const totalEmployees = await User.countDocuments(userQuery);
         // We count anyone with a record (who checked in) as 'Physically Present' for the dashboard stat
         const present = await Attendance.countDocuments({ 
             ...attQuery, 
@@ -337,7 +321,7 @@ exports.requestRegularization = async (req, res, next) => {
         await record.save();
 
         // Notify for approval
-        const employee = await Employee.findById(record.employee).populate('reportingManager');
+        const employee = await User.findById(record.employee).populate('reportingManager');
         if (employee) {
             if (employee.reportingManager) {
                 await sendEmail({
@@ -351,7 +335,7 @@ exports.requestRegularization = async (req, res, next) => {
                     }
                 });
             } else {
-                const admins = await Employee.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
+                const admins = await User.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
                 for (const admin of admins) {
                     await sendEmail({
                         to: admin.email,
@@ -417,18 +401,13 @@ exports.getMonthlyReport = async (req, res, next) => {
         
         if (req.user) {
             if (req.user.role === 'Employee') {
-                const emp = await Employee.findOne({ email: req.user.email });
-                if (!emp) return res.status(403).json({ success: false, message: 'Employee profile not found.' });
-                matchQuery.employee = emp._id;
+                matchQuery.employee = req.user._id;
             } else if (req.user.role === 'Manager') {
-                const mgrEmp = await Employee.findOne({ email: req.user.email });
-                if (mgrEmp) {
-                    const allowedEmps = await Employee.find({ 
-                        $or: [{ reportingManager: mgrEmp._id }, { _id: mgrEmp._id }] 
-                    }).select('_id');
-                    const allowedIds = allowedEmps.map(e => e._id);
-                    matchQuery.employee = { $in: allowedIds };
-                }
+                const allowedEmps = await User.find({
+                    $or: [{ reportingManager: req.user._id }, { _id: req.user._id }]
+                }).select('_id');
+                const allowedIds = allowedEmps.map(e => e._id);
+                matchQuery.employee = { $in: allowedIds };
             }
         }
 
@@ -450,7 +429,7 @@ exports.getMonthlyReport = async (req, res, next) => {
         ]);
 
         // Populate employee details
-        const populatedReport = await Employee.populate(report, { path: '_id', select: 'firstName lastName employeeId department' });
+        const populatedReport = await User.populate(report, { path: '_id', select: 'firstName lastName employeeId department' });
 
         res.status(200).json({ success: true, data: populatedReport });
     } catch (error) { next(error); }

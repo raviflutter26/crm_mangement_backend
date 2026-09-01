@@ -13,7 +13,10 @@ router.post('/', ctrl.create);
 router.put('/:id', ctrl.update);
 router.patch('/:id/approve', authorize('admin', 'manager'), async (req, res) => {
     try {
-        const item = await TravelRequest.findByIdAndUpdate(req.params.id, { status: 'Approved', approvedBy: req.user._id }, { new: true });
+        const role = (req.user.role || '').toLowerCase();
+        const scopeFilter = role === 'superadmin' ? {} : { organizationId: req.user.organizationId };
+        const item = await TravelRequest.findOneAndUpdate({ _id: req.params.id, ...scopeFilter }, { status: 'Approved', approvedBy: req.user._id }, { new: true });
+        if (!item) return res.status(404).json({ success: false, message: 'Travel request not found' });
         res.json({ success: true, data: item });
     } catch (err) { res.status(400).json({ success: false, message: err.message }); }
 });

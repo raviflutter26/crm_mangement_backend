@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const employeeDocumentSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true },
     type: { type: String, enum: ['PDF', 'IMG', 'DOC', 'XLS', 'Other'], default: 'PDF' },
     category: { type: String, enum: ['Personal', 'Corporate', 'Operations', 'Compliance', 'Tax', 'Other'], default: 'Personal' },

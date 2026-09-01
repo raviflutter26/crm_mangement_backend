@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const appraisalSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     reviewer: { type: String, trim: true },
     cycle: { type: String, trim: true },

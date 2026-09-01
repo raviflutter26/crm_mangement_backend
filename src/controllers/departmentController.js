@@ -46,8 +46,10 @@ exports.getDepartments = async (req, res, next) => {
 // @access  Private (Admin/HR)
 exports.createDepartment = async (req, res, next) => {
     try {
+        const { isActive, ...rest } = req.body;
         const department = await Department.create({
-            ...req.body,
+            ...rest,
+            status: isActive === false ? 'inactive' : 'active',
             organizationId: req.user.organizationId
         });
         res.status(201).json({ success: true, data: department });
@@ -61,9 +63,13 @@ exports.createDepartment = async (req, res, next) => {
 // @access  Private (Admin/HR)
 exports.updateDepartment = async (req, res, next) => {
     try {
+        const { isActive, ...rest } = req.body;
+        const updatePayload = { ...rest };
+        if (isActive !== undefined) updatePayload.status = isActive === false ? 'inactive' : 'active';
+
         const department = await Department.findOneAndUpdate(
             { _id: req.params.id, organizationId: req.user.organizationId },
-            req.body,
+            updatePayload,
             { new: true, runValidators: true }
         );
 

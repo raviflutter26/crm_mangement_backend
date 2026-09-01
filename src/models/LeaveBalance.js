@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const leaveBalanceSchema = new mongoose.Schema({
     employeeId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Employee',
+        ref: 'User',
         required: true,
     },
     organizationId: {

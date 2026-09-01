@@ -64,18 +64,8 @@ exports.createOrganization = async (req, res, next) => {
             role: 'admin',
             organizationId: organization._id,
             isFirstLogin: true,
-            isPasswordSet: !!admin?.password
-        });
-
-        // 2.5 Create Employee record for the admin
-        const Employee = require('../models/Employee');
-        await Employee.create({
-            organizationId: organization._id,
+            isPasswordSet: !!admin?.password,
             employeeId: `EMP-${Date.now().toString().slice(-4)}`,
-            firstName: adminUser.firstName,
-            lastName: adminUser.lastName,
-            email: adminUser.email,
-            role: 'Admin',
             status: 'Active',
             dateOfJoining: new Date()
         });
@@ -170,16 +160,28 @@ exports.getOrganizations = async (req, res, next) => {
         const skip = (p - 1) * l;
 
         const [data, total, activeMatching, globalTotal, globalActive] = await Promise.all([
-            Organization.find(query).sort(sortOption).skip(skip).limit(l),
+            Organization.find(query).sort(sortOption).skip(skip).limit(l).lean(),
             Organization.countDocuments(query),
             Organization.countDocuments({ ...query, status: 'active' }),
             Organization.countDocuments({ deletedAt: null }),
             Organization.countDocuments({ deletedAt: null, status: 'active' })
         ]);
 
+        // Attach live employee counts per organization
+        const orgIds = data.map(org => org._id);
+        const employeeCounts = await User.aggregate([
+            { $match: { organizationId: { $in: orgIds } } },
+            { $group: { _id: '$organizationId', count: { $sum: 1 } } }
+        ]);
+        const countByOrgId = new Map(employeeCounts.map(e => [e._id.toString(), e.count]));
+        const dataWithCounts = data.map(org => ({
+            ...org,
+            employeeCount: countByOrgId.get(org._id.toString()) || 0
+        }));
+
         res.status(200).json({
             success: true,
-            data,
+            data: dataWithCounts,
             pagination: {
                 total,
                 active: activeMatching,
@@ -225,11 +227,12 @@ exports.updateOrganization = async (req, res, next) => {
  */
 exports.getOrganizationById = async (req, res, next) => {
     try {
-        const organization = await Organization.findById(req.params.id);
+        const organization = await Organization.findById(req.params.id).lean();
         if (!organization) {
             return res.status(404).json({ success: false, message: 'Organization not found' });
         }
-        res.status(200).json({ success: true, data: organization });
+        const employeeCount = await User.countDocuments({ organizationId: organization._id });
+        res.status(200).json({ success: true, data: { ...organization, employeeCount } });
     } catch (error) { next(error); }
 };
 

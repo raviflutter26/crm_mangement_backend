@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const expenseSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     category: { type: String, enum: ['travel', 'food', 'accommodation', 'equipment', 'training', 'medical', 'other'], default: 'other' },
     title: { type: String, required: true, trim: true },

@@ -4,7 +4,7 @@ const { encrypt, decrypt, maskAccountNumber } = require('../utils/encryption');
 const bankDetailSchema = new mongoose.Schema({
     employeeId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Employee',
+        ref: 'User',
         required: true,
         unique: true
     },
@@ -36,7 +36,7 @@ const bankDetailSchema = new mongoose.Schema({
     },
     updatedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Employee'
+        ref: 'User'
     }
 }, {
     timestamps: true

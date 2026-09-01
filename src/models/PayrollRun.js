@@ -7,9 +7,11 @@ const payrollRunSchema = new mongoose.Schema(
         year: { type: Number, required: true },
         status: {
             type: String,
-            enum: ['draft', 'processing', 'review', 'approved', 'paid', 'failed'],
+            enum: ['draft', 'processing', 'review', 'approved', 'locked', 'paid', 'failed'],
             default: 'draft',
         },
+        lockedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        lockedAt: { type: Date },
         // Summary
         totalEmployees: { type: Number, default: 0 },
         totalGrossPay: { type: Number, default: 0 },

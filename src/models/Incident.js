@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const incidentSchema = new mongoose.Schema({
-    reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, enum: ['Near Miss', 'Hazard Report', 'Injury', 'Property Damage', 'Environmental', 'Other'], default: 'Hazard Report' },
     site: { type: String, required: true },
     description: { type: String },

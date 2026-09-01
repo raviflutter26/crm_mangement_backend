@@ -2,9 +2,19 @@ const RazorpayService = require('../services/razorpayService');
 const PayoutTransaction = require('../models/PayoutTransaction');
 const Payroll = require('../models/Payroll');
 const PayrollRun = require('../models/PayrollRun');
-const Employee = require('../models/Employee');
+const User = require('../models/User');
 const BankDetail = require('../models/BankDetail');
 const { sendEmail } = require('../services/emailService');
+const { logAction } = require('../utils/auditLogger');
+
+/**
+ * Payout transactions have no organizationId of their own — scope them via
+ * the Payroll records that belong to the requester's organization.
+ */
+async function orgScopedPayrollIds(orgId) {
+    const payrolls = await Payroll.find({ organizationId: orgId }).select('_id');
+    return payrolls.map(p => p._id);
+}
 
 /**
  * Controller to handle Salary Payouts via RazorpayX
@@ -24,8 +34,8 @@ class PayoutController {
                 // Process the whole run
                 const run = await PayrollRun.findById(runId).populate('payrollRecords');
                 if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found' });
-                if (run.status !== 'approved') {
-                    return res.status(400).json({ success: false, message: 'Only approved payroll runs can be paid' });
+                if (run.status !== 'locked') {
+                    return res.status(400).json({ success: false, message: 'Payroll run must be locked before disbursement' });
                 }
                 
                 // Get individual payroll documents from the run
@@ -94,6 +104,12 @@ class PayoutController {
                 }
             });
 
+            await logAction(req.user?._id, 'disburse', 'Payroll', {
+                message: `Disbursement triggered for ${pendingTransactions.length} record(s)${runId ? ` (run ${runId})` : ''}. Success: ${results.success}, Failed: ${results.failed}`,
+                entity: runId ? 'PayrollRun' : 'Payroll',
+                entityId: runId || payrollId,
+            }, req);
+
             return res.json({
                 success: true,
                 message: `Payout initiated for ${pendingTransactions.length} records.`,
@@ -101,6 +117,104 @@ class PayoutController {
             });
         } catch (error) {
             console.error('Payout Initiation Error:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+
+    /**
+     * GET /api/payouts/status
+     * Summary counts of payout transactions for the requester's organization
+     */
+    static async getStatus(req, res) {
+        try {
+            const orgId = req.user?.organizationId;
+            const payrollIds = await orgScopedPayrollIds(orgId);
+            const transactions = await PayoutTransaction.find({ payrollId: { $in: payrollIds } });
+
+            const summary = {
+                total: transactions.length,
+                pending: transactions.filter(t => t.status === 'pending' || t.status === 'queued').length,
+                processing: transactions.filter(t => t.status === 'processing').length,
+                processed: transactions.filter(t => t.status === 'processed' || t.status === 'processed_at_bank').length,
+                failed: transactions.filter(t => t.status === 'failed').length,
+            };
+
+            res.json({ success: true, data: summary });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+
+    /**
+     * GET /api/payouts/history
+     * Full transaction list for the requester's organization
+     */
+    static async getHistory(req, res) {
+        try {
+            const orgId = req.user?.organizationId;
+            const payrollIds = await orgScopedPayrollIds(orgId);
+            const transactions = await PayoutTransaction.find({ payrollId: { $in: payrollIds } })
+                .populate('employeeId', 'firstName lastName employeeId')
+                .sort('-createdAt');
+
+            const data = transactions.map(t => ({
+                _id: t._id,
+                employeeName: t.employeeId ? `${t.employeeId.firstName || ''} ${t.employeeId.lastName || ''}`.trim() : undefined,
+                employeeId: t.employeeId?.employeeId,
+                amount: t.amount,
+                razorpayPayoutId: t.razorpayPayoutId,
+                status: t.status,
+                mode: t.mode,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                failureReason: t.errorMessage,
+            }));
+
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+
+    /**
+     * POST /api/payouts/:id/retry
+     * Re-attempt a failed payout transaction
+     */
+    static async retryPayout(req, res) {
+        try {
+            const orgId = req.user?.organizationId;
+            const payrollIds = await orgScopedPayrollIds(orgId);
+            const transaction = await PayoutTransaction.findOne({ _id: req.params.id, payrollId: { $in: payrollIds } });
+            if (!transaction) return res.status(404).json({ success: false, message: 'Payout transaction not found' });
+            if (transaction.status !== 'failed') {
+                return res.status(400).json({ success: false, message: 'Only failed payouts can be retried' });
+            }
+
+            transaction.status = 'pending';
+            transaction.errorMessage = undefined;
+            await transaction.save();
+
+            try {
+                await RazorpayService.processPayout(transaction);
+            } catch (payoutError) {
+                // processPayout already persists the failure status/message on the transaction
+                await logAction(req.user?._id, 'retry_payout', 'Payroll', {
+                    message: `Retry failed for payout ${transaction._id}: ${payoutError.message}`,
+                    entity: 'PayoutTransaction',
+                    entityId: transaction._id.toString(),
+                    status: 'failure',
+                }, req);
+                return res.status(400).json({ success: false, message: payoutError.message });
+            }
+
+            await logAction(req.user?._id, 'retry_payout', 'Payroll', {
+                message: `Retry initiated for payout ${transaction._id}`,
+                entity: 'PayoutTransaction',
+                entityId: transaction._id.toString(),
+            }, req);
+
+            res.json({ success: true, data: transaction });
+        } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
     }
@@ -126,7 +240,7 @@ class PayoutController {
                     transaction.processedAt = new Date();
                     
                     // Notify Employee
-                    const empForEmail = await Employee.findById(transaction.employeeId);
+                    const empForEmail = await User.findById(transaction.employeeId);
                     if (empForEmail) {
                         await sendEmail({
                             to: empForEmail.email,
@@ -146,7 +260,7 @@ class PayoutController {
                     transaction.errorMessage = payout.failure_reason;
 
                     // Notify HR about failure
-                    const failedEmp = await Employee.findById(transaction.employeeId);
+                    const failedEmp = await User.findById(transaction.employeeId);
                     await sendEmail({
                         to: process.env.HR_EMAIL || process.env.EMAIL_USER,
                         subject: `PAYOUT FAILED: ${failedEmp ? failedEmp.firstName : 'Unknown Employee'}`,
@@ -185,7 +299,7 @@ class PayoutController {
     static async prepareEmployee(req, res) {
         try {
             const { employeeId } = req.params;
-            const employee = await Employee.findById(employeeId);
+            const employee = await User.findById(employeeId);
             const bank = await BankDetail.findOne({ employeeId });
 
             if (!bank) return res.status(404).json({ success: false, message: 'Bank details not found' });

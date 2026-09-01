@@ -8,6 +8,9 @@ router.use(authenticate, denySuperAdmin);
 router.get('/summary', payrollController.getPayrollSummary);
 router.post('/sync', authorize('admin', 'hr'), payrollController.syncFromZoho);
 router.get('/payslip/:employeeId/:payRunId', payrollController.getPayslip);
+// Specific routes must come before the generic '/:id' route below to avoid collision.
+router.get('/attendance-summary', payrollController.getAttendanceSummary);
+router.get('/audit-logs', payrollController.getPayrollAuditLogs);
 
 router.route('/')
     .get(payrollController.getPayroll)

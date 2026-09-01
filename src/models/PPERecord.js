@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const ppeRecordSchema = new mongoose.Schema({
-    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     item: { type: String, required: true },
     issueDate: { type: Date, default: Date.now },
     condition: { type: String, enum: ['New', 'Good', 'Wear Detected', 'Damaged', 'Replaced'], default: 'New' },
