@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const assetSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     name: { type: String, required: true, trim: true },
     assetId: { type: String, trim: true },
     type: { type: String, enum: ['laptop', 'desktop', 'monitor', 'phone', 'tablet', 'furniture', 'vehicle', 'id-card', 'other'], default: 'other' },
@@ -18,5 +19,7 @@ const assetSchema = new mongoose.Schema({
     condition: { type: String, enum: ['new', 'good', 'fair', 'poor'], default: 'new' },
     notes: { type: String, trim: true }
 }, { timestamps: true });
+
+assetSchema.index({ organizationId: 1, status: 1 });
 
 module.exports = mongoose.model('Asset', assetSchema);

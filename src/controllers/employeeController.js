@@ -4,6 +4,7 @@ const zohoPeopleService = require('../services/zohoPeopleService');
 const { logAction } = require('../utils/auditLogger');
 const { sendEmail } = require('../services/emailService');
 const crypto = require('crypto');
+const { scopeFilter } = require('../utils/tenancy');
 
 /**
  * @desc    Get all employees
@@ -84,7 +85,7 @@ exports.getEmployees = async (req, res, next) => {
  */
 exports.getEmployee = async (req, res, next) => {
     try {
-        const employee = await User.findById(req.params.id)
+        const employee = await User.findOne({ _id: req.params.id, ...scopeFilter(req) })
             .populate('reportingManager', 'firstName lastName role designation employeeId')
             .populate('shift', 'name startTime endTime');
         if (!employee) {
@@ -245,13 +246,17 @@ exports.updateEmployee = async (req, res, next) => {
             }
         }
 
-        const employee = await User.findByIdAndUpdate(req.params.id, {
-            ...req.body,
-            panNumber: panNumber ? panNumber.toUpperCase() : undefined
-        }, {
-            new: true,
-            runValidators: true,
-        });
+        const employee = await User.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            {
+                ...req.body,
+                panNumber: panNumber ? panNumber.toUpperCase() : undefined
+            },
+            {
+                new: true,
+                runValidators: true,
+            }
+        );
 
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -272,7 +277,7 @@ exports.updateEmployee = async (req, res, next) => {
  */
 exports.deleteEmployee = async (req, res, next) => {
     try {
-        const employee = await User.findByIdAndDelete(req.params.id);
+        const employee = await User.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
         }
@@ -420,7 +425,8 @@ exports.getStats = async (req, res, next) => {
 exports.updateBankDetails = async (req, res, next) => {
     try {
         const { accountNumber, ifsc, bankName, uan, pan } = req.body;
-        const employee = await User.findById(req.params.id);
+        // Payout account writes must stay inside the caller's organization.
+        const employee = await User.findOne({ _id: req.params.id, ...scopeFilter(req) });
         
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -475,7 +481,7 @@ exports.updateBankDetails = async (req, res, next) => {
 exports.updateSalaryStructure = async (req, res, next) => {
     try {
         const { basic, hra, da, ta, specialAllowance, lta, ctc } = req.body;
-        const employee = await User.findById(req.params.id);
+        const employee = await User.findOne({ _id: req.params.id, ...scopeFilter(req) });
         
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found.' });

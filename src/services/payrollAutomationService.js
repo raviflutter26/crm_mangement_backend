@@ -85,7 +85,7 @@ class PayrollAutomationService {
             // In a real scenario, this would fetch from Attendance model
             const presentDays = workingDays; 
 
-            const breakdown = calculateSalaryBreakdown(emp, config, workingDays, presentDays);
+            const breakdown = calculateSalaryBreakdown(emp, config, workingDays, presentDays, parseInt(month));
 
             const record = await Payroll.create({
                 employee: emp._id,

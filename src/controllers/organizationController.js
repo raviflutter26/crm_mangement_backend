@@ -7,6 +7,7 @@ const { sendEmail } = require('../services/emailService');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const { isSuperAdmin, requireOwnOrg } = require('../utils/tenancy');
 
 /**
  * @desc    Create a new organization
@@ -203,6 +204,9 @@ exports.getOrganizations = async (req, res, next) => {
  */
 exports.updateOrganization = async (req, res, next) => {
     try {
+        // An org Admin may only edit their own organization; :id is client-supplied.
+        if (!requireOwnOrg(req, res, req.params.id)) return;
+
         const organization = await Organization.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true
@@ -227,6 +231,8 @@ exports.updateOrganization = async (req, res, next) => {
  */
 exports.getOrganizationById = async (req, res, next) => {
     try {
+        if (!requireOwnOrg(req, res, req.params.id)) return;
+
         const organization = await Organization.findById(req.params.id).lean();
         if (!organization) {
             return res.status(404).json({ success: false, message: 'Organization not found' });
@@ -242,6 +248,11 @@ exports.getOrganizationById = async (req, res, next) => {
  */
 exports.deleteOrganization = async (req, res, next) => {
     try {
+        // Removing a tenant is a platform action, never a tenant-level one.
+        if (!isSuperAdmin(req)) {
+            return res.status(403).json({ success: false, message: 'Only a superadmin can remove an organization.' });
+        }
+
         const organization = await Organization.findByIdAndUpdate(req.params.id, { 
             deletedAt: new Date(),
             status: 'inactive'
@@ -261,6 +272,11 @@ exports.deleteOrganization = async (req, res, next) => {
  */
 exports.updateOrganizationStatus = async (req, res, next) => {
     try {
+        // Suspending or reactivating a tenant is a platform action.
+        if (!isSuperAdmin(req)) {
+            return res.status(403).json({ success: false, message: 'Only a superadmin can change organization status.' });
+        }
+
         const organization = await Organization.findByIdAndUpdate(req.params.id, { 
             status: req.body.status 
         }, { new: true });
@@ -279,6 +295,13 @@ exports.updateOrganizationStatus = async (req, res, next) => {
  */
 exports.impersonateOrganization = async (req, res, next) => {
     try {
+        // This mints a valid session for another organization's admin. Behind a
+        // tenant-level role it is a complete cross-tenant account takeover, so it
+        // must be superadmin-only.
+        if (!isSuperAdmin(req)) {
+            return res.status(403).json({ success: false, message: 'Only a superadmin can impersonate an organization.' });
+        }
+
         // Find primary admin for this org
         const adminUser = await User.findOne({ 
             organizationId: req.params.id, 

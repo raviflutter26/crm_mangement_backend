@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const supportTicketSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     ticketId: { type: String, trim: true },
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
@@ -17,7 +18,8 @@ const supportTicketSchema = new mongoose.Schema({
 // Auto-generate ticket ID
 supportTicketSchema.pre('save', async function (next) {
     if (!this.ticketId) {
-        const count = await mongoose.model('SupportTicket').countDocuments();
+        // Sequence is per organization so ticket numbers don't leak platform-wide volume.
+        const count = await mongoose.model('SupportTicket').countDocuments({ organizationId: this.organizationId });
         this.ticketId = `TKT-${String(count + 1).padStart(5, '0')}`;
     }
     next();

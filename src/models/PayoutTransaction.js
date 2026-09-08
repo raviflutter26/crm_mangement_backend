@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const payoutTransactionSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     payrollId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Payroll',
@@ -56,5 +57,6 @@ const payoutTransactionSchema = new mongoose.Schema({
 // Indexes for fast lookup from Webhooks
 // payoutTransactionSchema.index({ razorpayPayoutId: 1 }); // Redundant, razorpayPayoutId has index: true above
 payoutTransactionSchema.index({ payrollId: 1, employeeId: 1 });
+payoutTransactionSchema.index({ organizationId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('PayoutTransaction', payoutTransactionSchema);

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const complianceSettingsSchema = new mongoose.Schema(
     {
+        organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, unique: true, index: true },
         // PF Settings
         pf: {
             enabled: { type: Boolean, default: true },

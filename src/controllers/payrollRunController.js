@@ -99,7 +99,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
             const leaveDays = workingDays - presentDays;
 
             // Calculate salary breakdown using tax calculator
-            const breakdown = calculateSalaryBreakdown(emp, config, workingDays, presentDays);
+            const breakdown = calculateSalaryBreakdown(emp, config, workingDays, presentDays, parseInt(month));
 
             // Create individual payroll record
             const payrollRecord = await Payroll.create({

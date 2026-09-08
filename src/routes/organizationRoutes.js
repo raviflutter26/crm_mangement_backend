@@ -27,8 +27,8 @@ router.post('/', authorize('Admin'), organizationController.createOrganization);
 router.get('/', organizationController.getOrganizations);
 router.get('/:id', organizationController.getOrganizationById);
 router.put('/:id', authorize('Admin', 'HR'), organizationController.updateOrganization);
-router.patch('/:id/status', authorize('Admin', 'HR'), organizationController.updateOrganizationStatus);
-router.delete('/:id', authorize('Admin'), organizationController.deleteOrganization);
-router.post('/:id/impersonate', authorize('Admin'), organizationController.impersonateOrganization);
+router.patch('/:id/status', authorize('superadmin'), organizationController.updateOrganizationStatus);
+router.delete('/:id', authorize('superadmin'), organizationController.deleteOrganization);
+router.post('/:id/impersonate', authorize('superadmin'), organizationController.impersonateOrganization);
 
 module.exports = router;

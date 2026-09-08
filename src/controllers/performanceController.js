@@ -1,10 +1,11 @@
 const Goal = require('../models/Goal');
 const Appraisal = require('../models/Appraisal');
+const { scopeFilter, withOrg, requireOrg } = require('../utils/tenancy');
 
 // =========== GOALS ===========
 exports.getGoals = async (req, res) => {
     try {
-        const filter = {};
+        const filter = { ...scopeFilter(req) };
         if (req.query.employee) filter.employee = req.query.employee;
         if (req.query.status) filter.status = req.query.status;
         const data = await Goal.find(filter).sort({ createdAt: -1 });
@@ -16,7 +17,8 @@ exports.getGoals = async (req, res) => {
 
 exports.createGoal = async (req, res) => {
     try {
-        const doc = await Goal.create(req.body);
+        if (!requireOrg(req, res)) return;
+        const doc = await Goal.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: doc });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
@@ -25,7 +27,11 @@ exports.createGoal = async (req, res) => {
 
 exports.updateGoal = async (req, res) => {
     try {
-        const doc = await Goal.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const doc = await Goal.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            withOrg(req, req.body),
+            { new: true }
+        );
         if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
         res.json({ success: true, data: doc });
     } catch (err) {
@@ -35,7 +41,8 @@ exports.updateGoal = async (req, res) => {
 
 exports.deleteGoal = async (req, res) => {
     try {
-        await Goal.findByIdAndDelete(req.params.id);
+        const doc = await Goal.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
+        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
         res.json({ success: true, message: 'Deleted' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -45,7 +52,7 @@ exports.deleteGoal = async (req, res) => {
 // =========== APPRAISALS ===========
 exports.getAppraisals = async (req, res) => {
     try {
-        const filter = {};
+        const filter = { ...scopeFilter(req) };
         if (req.query.employee) filter.employee = req.query.employee;
         if (req.query.cycle) filter.cycle = req.query.cycle;
         if (req.query.status) filter.status = req.query.status;
@@ -58,7 +65,8 @@ exports.getAppraisals = async (req, res) => {
 
 exports.createAppraisal = async (req, res) => {
     try {
-        const doc = await Appraisal.create(req.body);
+        if (!requireOrg(req, res)) return;
+        const doc = await Appraisal.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: doc });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
@@ -67,7 +75,11 @@ exports.createAppraisal = async (req, res) => {
 
 exports.updateAppraisal = async (req, res) => {
     try {
-        const doc = await Appraisal.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const doc = await Appraisal.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            withOrg(req, req.body),
+            { new: true }
+        );
         if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
         res.json({ success: true, data: doc });
     } catch (err) {
@@ -77,7 +89,8 @@ exports.updateAppraisal = async (req, res) => {
 
 exports.deleteAppraisal = async (req, res) => {
     try {
-        await Appraisal.findByIdAndDelete(req.params.id);
+        const doc = await Appraisal.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
+        if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
         res.json({ success: true, message: 'Deleted' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

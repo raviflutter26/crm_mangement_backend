@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const salaryComponentSchema = new mongoose.Schema(
     {
+        organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
         name: { type: String, required: true },
         category: {
             type: String,
@@ -42,7 +43,7 @@ const salaryComponentSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// Compound index to prevent duplicate names within same category
-salaryComponentSchema.index({ name: 1, category: 1 }, { unique: true });
+// Prevent duplicate names within the same category, scoped to one organization.
+salaryComponentSchema.index({ organizationId: 1, name: 1, category: 1 }, { unique: true });
 
 module.exports = mongoose.model('SalaryComponent', salaryComponentSchema);

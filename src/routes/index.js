@@ -55,6 +55,7 @@ const timesheetRoutes = require('./timesheetRoutes');
 const skillRoutes = require('./skillRoutes');
 const taxDocumentRoutes = require('./taxDocumentRoutes');
 const ipAllowlistRoutes = require('./ipAllowlistRoutes');
+const revenueRoutes = require('./revenueRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -116,6 +117,7 @@ router.use('/timesheets', timesheetRoutes);
 router.use('/skills', skillRoutes);
 router.use('/tax-documents', taxDocumentRoutes);
 router.use('/ip-allowlist', ipAllowlistRoutes);
+router.use('/revenue', revenueRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

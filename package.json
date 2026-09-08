@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/",
+    "test:watch": "node --test --watch test/"
   },
   "keywords": [
     "zoho",
@@ -17,6 +18,9 @@
   ],
   "author": "Ravi",
   "license": "ISC",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "type": "commonjs",
   "dependencies": {
     "@types/rate-limit-redis": "^1.7.4",

@@ -8,6 +8,7 @@ const config = require('../config');
 const { sendEmail } = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const crypto = require('crypto');
+const { isSuperAdmin } = require('../utils/tenancy');
 
 /**
  * Generate JWT token. Pass a jti to make the token revocable via Session tracking;
@@ -524,7 +525,12 @@ exports.changePassword = async (req, res, next) => {
  */
 exports.getAllUsers = async (req, res, next) => {
     try {
-        const users = await User.find().select('-password').sort({ createdAt: -1 });
+        // Scoped to the caller's organization: unscoped, this returned every
+        // tenant's user list to any org-level Admin.
+        const filter = isSuperAdmin(req)
+            ? (req.query.organizationId ? { organizationId: req.query.organizationId } : {})
+            : { organizationId: req.user?.organizationId };
+        const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
         res.status(200).json({ success: true, data: users });
     } catch (error) {
         next(error);
@@ -539,9 +545,25 @@ exports.updateUser = async (req, res, next) => {
     try {
         const { role, isActive } = req.body;
 
-        const user = await User.findByIdAndUpdate(
-            req.params.id,
-            { role, isActive },
+        // Only a superadmin may grant the superadmin role. Without this an org
+        // Admin could PUT their own id with role: 'superadmin' and take over the
+        // whole platform.
+        if (role && String(role).toLowerCase() === 'superadmin' && !isSuperAdmin(req)) {
+            return res.status(403).json({ success: false, message: 'Not authorized to assign the superadmin role.' });
+        }
+
+        const updates = {};
+        if (role !== undefined) updates.role = role;
+        if (isActive !== undefined) updates.isActive = isActive;
+
+        // The target user must be inside the caller's own organization.
+        const filter = isSuperAdmin(req)
+            ? { _id: req.params.id }
+            : { _id: req.params.id, organizationId: req.user?.organizationId };
+
+        const user = await User.findOneAndUpdate(
+            filter,
+            updates,
             { new: true, runValidators: true }
         ).select('-password');
 

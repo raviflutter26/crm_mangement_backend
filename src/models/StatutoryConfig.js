@@ -1,11 +1,17 @@
 const mongoose = require('mongoose');
 
 const statutoryConfigSchema = new mongoose.Schema({
+    organizationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        required: true,
+        unique: true,
+        index: true,
+    },
+    // Legacy key from before tenant scoping existed. Left optional so documents written
+    // by the old code still load; organizationId is the source of truth.
     companyId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Company', // Assuming there's a Company model, otherwise just a unique identifier
-        required: true,
-        unique: true
     },
     epf: {
         epfEnabled: { type: Boolean, default: true },
@@ -26,7 +32,12 @@ const statutoryConfigSchema = new mongoose.Schema({
         allowEmployeeLevelOverride: { type: Boolean, default: false },
         proRateRestrictedPFWage: { type: Boolean, default: true },
         considerSalaryComponentsOnLOP: { type: Boolean, default: true },
-        eligibleForABRYScheme: { type: Boolean, default: false }
+        eligibleForABRYScheme: { type: Boolean, default: false },
+        // EPS pensionable wage ceiling — 8.33% of this is the monthly EPS cap.
+        epsWageCeiling: { type: Number, default: 15000 },
+        // Organization-wide default; override per employee via
+        // User.statutory.pf.higherPensionOptedIn.
+        higherPensionOptedIn: { type: Boolean, default: false }
     },
     esi: {
         esiEnabled: { type: Boolean, default: true },

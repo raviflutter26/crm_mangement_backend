@@ -1,4 +1,5 @@
 const SalaryComponent = require('../models/SalaryComponent');
+const { scopeFilter, withOrg, requireOrg } = require('../utils/tenancy');
 
 // Default seed data matching Zoho Payroll
 const DEFAULT_COMPONENTS = [
@@ -37,7 +38,7 @@ const DEFAULT_COMPONENTS = [
 // GET all components (optionally filter by category)
 exports.getAll = async (req, res, next) => {
     try {
-        const filter = {};
+        const filter = { ...scopeFilter(req) };
         if (req.query.category) filter.category = req.query.category;
         const data = await SalaryComponent.find(filter).sort({ sortOrder: 1, createdAt: 1 });
         res.json({ success: true, data });
@@ -47,7 +48,7 @@ exports.getAll = async (req, res, next) => {
 // GET single component
 exports.getById = async (req, res, next) => {
     try {
-        const doc = await SalaryComponent.findById(req.params.id);
+        const doc = await SalaryComponent.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!doc) return res.status(404).json({ success: false, message: 'Component not found' });
         res.json({ success: true, data: doc });
     } catch (error) { next(error); }
@@ -56,7 +57,8 @@ exports.getById = async (req, res, next) => {
 // CREATE component
 exports.create = async (req, res, next) => {
     try {
-        const doc = await SalaryComponent.create(req.body);
+        if (!requireOrg(req, res)) return;
+        const doc = await SalaryComponent.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: doc, message: 'Component created.' });
     } catch (error) {
         if (error.code === 11000) {
@@ -69,7 +71,11 @@ exports.create = async (req, res, next) => {
 // UPDATE component
 exports.update = async (req, res, next) => {
     try {
-        const doc = await SalaryComponent.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+        const doc = await SalaryComponent.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            withOrg(req, req.body),
+            { new: true, runValidators: true }
+        );
         if (!doc) return res.status(404).json({ success: false, message: 'Component not found' });
         res.json({ success: true, data: doc, message: 'Component updated.' });
     } catch (error) { next(error); }
@@ -78,12 +84,12 @@ exports.update = async (req, res, next) => {
 // DELETE component (soft-delete for system, hard-delete for custom)
 exports.remove = async (req, res, next) => {
     try {
-        const doc = await SalaryComponent.findById(req.params.id);
+        const doc = await SalaryComponent.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!doc) return res.status(404).json({ success: false, message: 'Component not found' });
         if (doc.isSystem) {
             return res.status(400).json({ success: false, message: 'System components cannot be deleted. You can disable them instead.' });
         }
-        await SalaryComponent.findByIdAndDelete(req.params.id);
+        await SalaryComponent.deleteOne({ _id: doc._id });
         res.json({ success: true, message: 'Component deleted.' });
     } catch (error) { next(error); }
 };
@@ -91,7 +97,7 @@ exports.remove = async (req, res, next) => {
 // TOGGLE status (active/inactive)
 exports.toggleStatus = async (req, res, next) => {
     try {
-        const doc = await SalaryComponent.findById(req.params.id);
+        const doc = await SalaryComponent.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!doc) return res.status(404).json({ success: false, message: 'Component not found' });
         doc.isActive = !doc.isActive;
         await doc.save();
@@ -102,15 +108,22 @@ exports.toggleStatus = async (req, res, next) => {
 // SEED default components (idempotent — only inserts missing ones)
 exports.seedDefaults = async (req, res, next) => {
     try {
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
         let created = 0;
         for (const comp of DEFAULT_COMPONENTS) {
-            const exists = await SalaryComponent.findOne({ name: comp.name, category: comp.category });
+            const exists = await SalaryComponent.findOne({
+                name: comp.name,
+                category: comp.category,
+                organizationId: orgId,
+            });
             if (!exists) {
-                await SalaryComponent.create(comp);
+                await SalaryComponent.create({ ...comp, organizationId: orgId });
                 created++;
             }
         }
-        const total = await SalaryComponent.countDocuments();
+        const total = await SalaryComponent.countDocuments({ organizationId: orgId });
         res.json({ success: true, message: `Seeded ${created} new components. Total: ${total}.`, data: { created, total } });
     } catch (error) { next(error); }
 };

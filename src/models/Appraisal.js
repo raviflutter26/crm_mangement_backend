@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const appraisalSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     reviewer: { type: String, trim: true },

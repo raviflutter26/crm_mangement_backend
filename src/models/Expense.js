@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const expenseSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     employeeName: { type: String, trim: true },
     category: { type: String, enum: ['travel', 'food', 'accommodation', 'equipment', 'training', 'medical', 'other'], default: 'other' },
@@ -16,5 +17,7 @@ const expenseSchema = new mongoose.Schema({
     reimbursedAt: { type: Date },
     rejectionReason: { type: String, trim: true }
 }, { timestamps: true });
+
+expenseSchema.index({ organizationId: 1, status: 1 });
 
 module.exports = mongoose.model('Expense', expenseSchema);

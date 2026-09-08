@@ -19,6 +19,12 @@ router.get('/status', authorize('Admin', 'HR'), payoutController.getStatus);
 router.get('/history', authorize('Admin', 'HR'), payoutController.getHistory);
 
 /**
+ * @route GET /api/payouts/run/:runId
+ * @desc All payout transactions for a single payroll run
+ */
+router.get('/run/:runId', authorize('Admin', 'HR'), payoutController.getByRun);
+
+/**
  * @route POST /api/payouts/:id/retry
  * @desc Re-attempt a failed payout transaction
  */

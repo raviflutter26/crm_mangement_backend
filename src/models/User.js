@@ -170,7 +170,11 @@ const userSchema = new mongoose.Schema(
                 allowOverride: { type: Boolean, default: false },
                 proRateRestrictedPFWage: { type: Boolean, default: true },
                 considerComponentsOnLOP: { type: Boolean, default: true },
-                eligibleForABRY: { type: Boolean, default: false }
+                eligibleForABRY: { type: Boolean, default: false },
+                // Set only for employees who opted for higher pension on actual
+                // wages (Nov 2022 Supreme Court ruling). When false, EPS is
+                // capped at 8.33% of the ₹15,000 pensionable wage ceiling.
+                higherPensionOptedIn: { type: Boolean, default: false }
             },
             esi: {
                 enabled: { type: Boolean, default: true },

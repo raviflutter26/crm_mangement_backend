@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const payrollReportSchema = new mongoose.Schema({
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     reportName: {
         type: String,
         required: true,

@@ -8,6 +8,7 @@ const attendanceConfigService = require('../services/attendanceConfigService');
 const permissionService = require('../services/permissionService');
 const zohoPeopleService = require('../services/zohoPeopleService');
 const { sendEmail } = require('../services/emailService');
+const { scopeFilter } = require('../utils/tenancy');
 
 /**
  * @desc    Get all attendance records
@@ -362,7 +363,7 @@ exports.requestRegularization = async (req, res, next) => {
 exports.handleRegularization = async (req, res, next) => {
     try {
         const { status, checkIn, checkOut } = req.body;
-        const record = await Attendance.findById(req.params.id);
+        const record = await Attendance.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!record) return res.status(404).json({ success: false, message: 'Record not found.' });
 
         if (status === 'approved') {

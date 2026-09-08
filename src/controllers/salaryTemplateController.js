@@ -1,4 +1,5 @@
 const SalaryTemplate = require('../models/SalaryTemplate');
+const { scopeFilter } = require('../utils/tenancy');
 
 // Self-healing index cleanup
 SalaryTemplate.collection.dropIndex('name_1').catch(() => {});
@@ -104,7 +105,11 @@ exports.calculateBreakdown = async (req, res, next) => {
  */
 exports.deleteTemplate = async (req, res, next) => {
     try {
-        await SalaryTemplate.findByIdAndUpdate(req.params.id, { isActive: false });
+        const template = await SalaryTemplate.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            { isActive: false }
+        );
+        if (!template) return res.status(404).json({ success: false, message: 'Template not found' });
         res.status(200).json({ success: true, message: 'Template deleted' });
     } catch (error) {
         next(error);

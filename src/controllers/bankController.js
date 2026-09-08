@@ -1,5 +1,6 @@
 const axios = require('axios');
 const User = require('../models/User');
+const { requireOrg } = require('../utils/tenancy');
 
 /**
  * @desc    Fetch Bank details from IFSC Code
@@ -54,7 +55,13 @@ exports.updateBankDetails = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Invalid IFSC format' });
         }
 
-        const employee = await User.findById(employeeId);
+        // employeeId is client-supplied, so the lookup must be constrained to the
+        // caller's own organization. Without this an Admin/HR of one tenant could
+        // rewrite another tenant's payout account and divert their salary.
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        const employee = await User.findOne({ _id: employeeId, organizationId: orgId });
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }

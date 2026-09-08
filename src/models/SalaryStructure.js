@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const salaryStructureSchema = new mongoose.Schema(
     {
-        name: { type: String, required: true, unique: true },
+        organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
+        name: { type: String, required: true },
         description: { type: String, default: '' },
         // Earnings breakdown as % of CTC
         earnings: {
@@ -33,5 +34,8 @@ const salaryStructureSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+// Structure names are unique per organization, not globally.
+salaryStructureSchema.index({ organizationId: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('SalaryStructure', salaryStructureSchema);

@@ -1,6 +1,7 @@
 const PayrollReport = require('../models/PayrollReport');
 const Payroll = require('../models/Payroll');
 const User = require('../models/User');
+const { scopeFilter, requireOrg } = require('../utils/tenancy');
 
 // Helper to generate CSV
 const generateCSV = (data, columns) => {
@@ -19,7 +20,7 @@ const generateCSV = (data, columns) => {
 exports.getReports = async (req, res) => {
     try {
         const { category, month, year, department } = req.query;
-        let query = {};
+        let query = { ...scopeFilter(req) };
 
         if (category) query.reportCategory = category;
         if (month) query.month = parseInt(month);
@@ -47,7 +48,8 @@ exports.getReports = async (req, res) => {
 // Get single report
 exports.getReportById = async (req, res) => {
     try {
-        const report = await PayrollReport.findById(req.params.id).populate('generatedBy', 'name email');
+        const report = await PayrollReport.findOne({ _id: req.params.id, ...scopeFilter(req) })
+            .populate('generatedBy', 'name email');
         if (!report) {
             return res.status(404).json({
                 success: false,
@@ -69,13 +71,21 @@ exports.getReportById = async (req, res) => {
 // Generate report (Real for common types)
 exports.generateReport = async (req, res) => {
     try {
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
         const { reportName, reportCategory, month, year, department, reportType = 'csv' } = req.body;
+
+        // Every source query below is scoped to this organization. Unscoped, these
+        // statutory reports would export every tenant's PAN, UAN and salary data
+        // into one downloadable CSV.
+        const orgScope = { organizationId: orgId };
 
         let csvData = [];
         let columns = [];
 
         if (reportName === 'Payroll Summary' || reportName === 'Salary Register - Monthly') {
-            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId');
+            const payrolls = await Payroll.find({ month, year, ...orgScope }).populate('employee', 'firstName lastName employeeId');
             columns = ['EmployeeID', 'Name', 'Gross', 'Deductions', 'NetPay', 'Status'];
             csvData = payrolls.map(p => ({
                 EmployeeID: p.employee?.employeeId,
@@ -86,7 +96,9 @@ exports.generateReport = async (req, res) => {
                 Status: p.paymentStatus
             }));
         } else if (reportName === 'Compensation Details') {
-            const emps = await User.find(department && department !== 'All' ? { department } : {});
+            const emps = await User.find(
+                department && department !== 'All' ? { department, ...orgScope } : { ...orgScope }
+            );
             columns = ['EmployeeID', 'Name', 'Department', 'Designation', 'CTC', 'Basic', 'HRA'];
             csvData = emps.map(e => ({
                 EmployeeID: e.employeeId,
@@ -98,7 +110,7 @@ exports.generateReport = async (req, res) => {
                 HRA: e.salary?.hra
             }));
         } else if (reportName === 'PF Challan') {
-            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId panNumber statutory');
+            const payrolls = await Payroll.find({ month, year, ...orgScope }).populate('employee', 'firstName lastName employeeId panNumber statutory');
             columns = ['UAN', 'Member Name', 'Gross Wages', 'EPF Wages', 'EPS Wages', 'EDLI Wages', 'EPF Contrib Remitted', 'EPS Contrib Remitted', 'EPF EPS Diff', 'NCP Days'];
             csvData = payrolls.map(p => {
                 const epfWages = p.earnings?.basic || 0;
@@ -120,7 +132,7 @@ exports.generateReport = async (req, res) => {
                 };
             });
         } else if (reportName === 'ESI Challan') {
-            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId statutory');
+            const payrolls = await Payroll.find({ month, year, ...orgScope }).populate('employee', 'firstName lastName employeeId statutory');
             columns = ['IP Number', 'IP Name', 'No of Days Worked', 'Total Monthly Wages', 'Employee Contrib', 'Employer Contrib'];
             csvData = payrolls.map(p => ({
                 'IP Number': p.employee?.statutory?.esi?.esiNumber || '',
@@ -131,7 +143,7 @@ exports.generateReport = async (req, res) => {
                 'Employer Contrib': p.employerContributions?.esi || 0
             }));
         } else if (reportName === 'TDS Report') {
-            const payrolls = await Payroll.find({ month, year }).populate('employee', 'firstName lastName employeeId panNumber');
+            const payrolls = await Payroll.find({ month, year, ...orgScope }).populate('employee', 'firstName lastName employeeId panNumber');
             columns = ['EmployeeID', 'PAN', 'Name', 'Gross Salary', 'TDS Deducted'];
             csvData = payrolls.map(p => ({
                 'EmployeeID': p.employee?.employeeId,
@@ -149,6 +161,7 @@ exports.generateReport = async (req, res) => {
         const csvContent = generateCSV(csvData, columns);
         
         const report = new PayrollReport({
+            organizationId: orgId,
             reportName,
             reportCategory,
             reportType,
@@ -178,7 +191,7 @@ exports.generateReport = async (req, res) => {
 // Download report
 exports.downloadReport = async (req, res) => {
     try {
-        const report = await PayrollReport.findById(req.params.id);
+        const report = await PayrollReport.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!report) return res.status(404).json({ success: false, message: 'Report not found' });
 
         if (report.fileUrl && report.fileUrl.startsWith('data:text/csv;base64,')) {

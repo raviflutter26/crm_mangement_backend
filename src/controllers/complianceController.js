@@ -1,12 +1,17 @@
 const ComplianceSettings = require('../models/ComplianceSettings');
+const { withOrg, requireOrg } = require('../utils/tenancy');
 
 // Get compliance settings
 exports.getSettings = async (req, res, next) => {
     try {
-        let settings = await ComplianceSettings.findOne({ isActive: true });
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        let settings = await ComplianceSettings.findOne({ isActive: true, organizationId: orgId });
         if (!settings) {
-            // Create default settings
+            // Create this organization's default settings
             settings = await ComplianceSettings.create({
+                organizationId: orgId,
                 pf: { enabled: true, employeeContribution: 12, employerContribution: 12, wageLimit: 15000, adminCharges: 0.5, edliCharges: 0.5 },
                 esi: { enabled: true, employeeContribution: 0.75, employerContribution: 3.25, wageLimit: 21000 },
                 professionalTax: {
@@ -52,11 +57,14 @@ exports.getSettings = async (req, res, next) => {
 // Update compliance settings
 exports.updateSettings = async (req, res, next) => {
     try {
-        let settings = await ComplianceSettings.findOne({ isActive: true });
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        let settings = await ComplianceSettings.findOne({ isActive: true, organizationId: orgId });
         if (!settings) {
-            settings = await ComplianceSettings.create(req.body);
+            settings = await ComplianceSettings.create(withOrg(req, req.body));
         } else {
-            Object.assign(settings, req.body);
+            Object.assign(settings, withOrg(req, req.body));
             await settings.save();
         }
         res.status(200).json({ success: true, data: settings, message: 'Settings updated.' });
@@ -66,7 +74,10 @@ exports.updateSettings = async (req, res, next) => {
 // Get PT slabs
 exports.getPTSlabs = async (req, res, next) => {
     try {
-        const settings = await ComplianceSettings.findOne({ isActive: true });
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        const settings = await ComplianceSettings.findOne({ isActive: true, organizationId: orgId });
         res.status(200).json({ success: true, data: settings?.professionalTax?.slabs || [] });
     } catch (error) { next(error); }
 };
@@ -74,7 +85,10 @@ exports.getPTSlabs = async (req, res, next) => {
 // Update PT slabs
 exports.updatePTSlabs = async (req, res, next) => {
     try {
-        const settings = await ComplianceSettings.findOne({ isActive: true });
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        const settings = await ComplianceSettings.findOne({ isActive: true, organizationId: orgId });
         if (!settings) return res.status(404).json({ success: false, message: 'Settings not found.' });
         settings.professionalTax.slabs = req.body.slabs;
         await settings.save();

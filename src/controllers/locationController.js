@@ -1,6 +1,7 @@
 const axios = require('axios');
 const Location = require('../models/Location');
 const indiaStatesDistricts = require('../data/indiaStatesDistricts');
+const { scopeFilter } = require('../utils/tenancy');
 
 // General-purpose cities lookup for non-India countries (India uses the bundled
 // static dataset instead — see ../data/indiaStatesDistricts.js).
@@ -158,10 +159,14 @@ exports.createLocation = async (req, res, next) => {
  */
 exports.updateLocation = async (req, res, next) => {
     try {
-        const location = await Location.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
+        const location = await Location.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            req.body,
+            {
+                new: true,
+                runValidators: true
+            }
+        );
         if (!location) return res.status(404).json({ success: false, message: 'Location not found' });
         res.status(200).json({
             success: true,
@@ -177,7 +182,11 @@ exports.updateLocation = async (req, res, next) => {
  */
 exports.deleteLocation = async (req, res, next) => {
     try {
-        const location = await Location.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+        const location = await Location.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            { isActive: false },
+            { new: true }
+        );
         if (!location) return res.status(404).json({ success: false, message: 'Location not found' });
         res.status(200).json({
             success: true,

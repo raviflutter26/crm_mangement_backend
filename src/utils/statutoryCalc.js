@@ -13,7 +13,13 @@ const calculateEPF = (pfWage, config) => {
     const {
         employeeContributionRate = 12,
         employerPFWageLimit = 15000,
-        employerContributionMode = 'Restrict to ₹15,000 of PF Wage'
+        employerContributionMode = 'Restrict to ₹15,000 of PF Wage',
+        // The Employees' Pension Scheme wage ceiling. 8.33% of ₹15,000 = ₹1,250
+        // is the standard monthly maximum.
+        epsWageCeiling = 15000,
+        // Employees who opted for higher pension on actual wages (permitted by
+        // the Nov 2022 Supreme Court ruling) are not bound by the ceiling.
+        higherPensionOptedIn = false
     } = config;
 
     // Employee Contribution: 12% of pfWage
@@ -25,13 +31,21 @@ const calculateEPF = (pfWage, config) => {
         cappedWage = Math.min(pfWage, employerPFWageLimit);
     }
 
-    // EPS: 8.33% of capped wage (max ₹1,250)
-    const employerEPS = Math.round(cappedWage * 0.0833);
-    
+    // EPS: 8.33% of the pensionable wage. The pensionable wage is itself capped
+    // at the EPS ceiling, so on 'Actual PF Wage' mode the employer's 12% is
+    // still computed on the full wage but only the first ₹15,000 feeds the
+    // pension scheme — the remainder is redirected to EPF below. Without this
+    // cap, EPS on a ₹30,000 wage came out at ₹2,499 instead of ₹1,250.
+    const pensionableWage = higherPensionOptedIn
+        ? cappedWage
+        : Math.min(cappedWage, epsWageCeiling);
+    const employerEPS = Math.round(pensionableWage * 0.0833);
+
     // Total Employer PF at 12%
     const totalEmployerPFAt12 = Math.round(cappedWage * 0.12);
-    
-    // Employer EPF: total - EPS
+
+    // Employer EPF: total - EPS. Anything the pension scheme cannot take lands
+    // here, so the employer's overall 12% is unchanged either way.
     const employerEPF = totalEmployerPFAt12 - employerEPS;
 
     // EDLI: 0.5% of capped wage

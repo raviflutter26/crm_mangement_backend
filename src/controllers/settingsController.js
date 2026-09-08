@@ -1,15 +1,19 @@
 const AttendanceConfig = require('../models/AttendanceConfig');
 const { clearCache } = require('../services/configService');
+const { withOrg, requireOrg } = require('../utils/tenancy');
 
 /**
- * @desc    Get current attendance configuration
+ * @desc    Get this organization's attendance configuration
  * @route   GET /api/settings/attendance
  */
 exports.getAttendanceSettings = async (req, res, next) => {
     try {
-        let config = await AttendanceConfig.findOne({ isActive: true });
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        let config = await AttendanceConfig.findOne({ isActive: true, organizationId: orgId });
         if (!config) {
-            config = await AttendanceConfig.create({});
+            config = await AttendanceConfig.create({ organizationId: orgId });
         }
         res.status(200).json({ success: true, data: config });
     } catch (error) {
@@ -18,29 +22,32 @@ exports.getAttendanceSettings = async (req, res, next) => {
 };
 
 /**
- * @desc    Update global attendance configuration
+ * @desc    Update this organization's attendance configuration
  * @route   POST /api/settings/attendance
  */
 exports.updateAttendanceSettings = async (req, res, next) => {
     try {
-        let config = await AttendanceConfig.findOne({ isActive: true });
-        
+        const orgId = requireOrg(req, res);
+        if (!orgId) return;
+
+        let config = await AttendanceConfig.findOne({ isActive: true, organizationId: orgId });
+
         if (!config) {
-            config = new AttendanceConfig(req.body);
+            config = new AttendanceConfig(withOrg(req, req.body));
         } else {
             // Apply updates
-            Object.assign(config, req.body);
+            Object.assign(config, withOrg(req, req.body));
         }
 
         await config.save();
-        
-        // Clear in-memory cache to ensure immediate effect
-        clearCache();
 
-        res.status(200).json({ 
-            success: true, 
-            data: config, 
-            message: 'Attendance configuration updated successfully' 
+        // Clear this organization's cache to ensure immediate effect
+        clearCache(orgId);
+
+        res.status(200).json({
+            success: true,
+            data: config,
+            message: 'Attendance configuration updated successfully'
         });
     } catch (error) {
         next(error);

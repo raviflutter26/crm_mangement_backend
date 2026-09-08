@@ -1,4 +1,5 @@
 const Shift = require('../models/Shift');
+const { scopeFilter } = require('../utils/tenancy');
 
 /**
  * @desc    Create a new shift
@@ -58,10 +59,14 @@ exports.getShifts = async (req, res, next) => {
  */
 exports.updateShift = async (req, res, next) => {
     try {
-        const shift = await Shift.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
+        const shift = await Shift.findOneAndUpdate(
+            { _id: req.params.id, ...scopeFilter(req) },
+            req.body,
+            {
+                new: true,
+                runValidators: true
+            }
+        );
 
         if (!shift) {
             return res.status(404).json({ success: false, message: 'Shift not found' });
@@ -82,7 +87,7 @@ exports.updateShift = async (req, res, next) => {
  */
 exports.deleteShift = async (req, res, next) => {
     try {
-        const shift = await Shift.findByIdAndDelete(req.params.id);
+        const shift = await Shift.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
         if (!shift) {
              return res.status(404).json({ success: false, message: 'Shift not found' });
         }

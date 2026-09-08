@@ -12,9 +12,13 @@ const {
  * @param {object} config - StatutoryConfig object (global)
  * @param {number} workingDays - Total working days
  * @param {number} presentDays - Employee present days
+ * @param {number} [payrollMonth] - 1-12, the month being paid. Defaults to the
+ *   current month only for backwards compatibility; always pass it explicitly.
+ *   LWF is cycle-based, so deriving the month from the clock made a payroll run
+ *   depend on the day it was executed rather than the period it covers.
  * @returns {object} Full salary breakdown
  */
-const calculateSalaryBreakdown = (employee, config, workingDays = 26, presentDays = 26) => {
+const calculateSalaryBreakdown = (employee, config, workingDays = 26, presentDays = 26, payrollMonth = new Date().getMonth() + 1) => {
     const salary = employee.salary || {};
     const ratio = workingDays > 0 ? (presentDays || 0) / workingDays : 1;
 
@@ -34,10 +38,21 @@ const calculateSalaryBreakdown = (employee, config, workingDays = 26, presentDay
     const grossEarnings = basic + hra + da + specialAllowance;
 
     // 2. EPF Calculation
+    //
+    // Higher pension is an individual election, and Mongoose always materialises
+    // the employee flag as `false` rather than leaving it undefined — so a plain
+    // spread would let that default overwrite an organization-wide `true`.
+    // Resolve it as an OR instead: opted in if either level says so.
+    const higherPensionOptedIn = Boolean(
+        config.epf?.higherPensionOptedIn || empStat.pf?.higherPensionOptedIn
+    );
+
     const epfResult = calculateEPF(pfWage, {
         ...config.epf,
         ...empStat.pf,
-        epfEnabled: empStat.pf?.enabled ?? config.epf.epfEnabled
+        epfEnabled: empStat.pf?.enabled ?? config.epf.epfEnabled,
+        epsWageCeiling: config.epf?.epsWageCeiling ?? 15000,
+        higherPensionOptedIn,
     });
 
     // 3. ESI Calculation
@@ -59,7 +74,7 @@ const calculateSalaryBreakdown = (employee, config, workingDays = 26, presentDay
         ...config.labourWelfareFund,
         ...empStat.lwf,
         lwfEnabled: empStat.lwf?.enabled ?? config.labourWelfareFund.lwfEnabled
-    }, new Date().getMonth() + 1);
+    }, payrollMonth);
 
     // 6. Statutory Bonus
     const bonusAmount = calculateStatutoryBonus(basic, {

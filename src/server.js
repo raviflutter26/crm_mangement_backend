@@ -10,22 +10,26 @@ const config = require('./config');
 const connectDB = require('./config/database');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
+const { UPLOAD_ROOT } = require('./middleware/upload');
 const PayrollScheduler = require('./scheduler/payrollCron');
 const AttendanceScheduler = require('./scheduler/attendanceCron');
 
 const app = express();
 
-// Initialize Schedulers
-PayrollScheduler.init();
-AttendanceScheduler.init();
+// Schedulers are started in startServer(), after the DB connection is up.
+// Initialising them here as well registered every cron twice, which risked
+// running a payroll twice for the same month.
 
 // Trust proxy to resolve 'X-Forwarded-For' error with express-rate-limit behind proxies/tunnels
 app.set('trust proxy', 1);
 
-// Debug: Log environment variable names (not values) to verify Render config
-console.log('🔍 Detected Environment Variables:', 
-    Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('PASS') && !k.includes('KEY')).join(', ')
-);
+// Outside production, list the environment variable names in play (never values)
+// to make a misconfigured local/staging setup obvious.
+if (!config.isProduction) {
+    console.log('🔍 Detected Environment Variables:',
+        Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('PASS') && !k.includes('KEY')).join(', ')
+    );
+}
 
 // ============== MIDDLEWARE ==============
 
@@ -49,7 +53,19 @@ app.use(cors({
 }));
 
 // Serve uploaded files (employee documents, receipts, etc.)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+//
+// ACCEPTED RISK (reviewed, deliberate): these files are served without
+// authentication, so anyone holding a URL can read the document — including
+// employee ID proofs and contracts. Protection today is filename entropy only
+// (timestamp + 16 random bytes), which is obscurity, not access control.
+//
+// Serving them behind auth needs a frontend change, because the session token
+// lives in localStorage and a browser <img>/<a> request cannot attach an
+// Authorization header. The two viable fixes are short-lived signed URLs, or
+// moving the token to a cookie and replacing this with an org-scoped download
+// route. Revisit before this system holds documents for employees outside the
+// organizations that already trust each other.
+app.use('/uploads', express.static(UPLOAD_ROOT, {
     setHeaders: (res) => {
         res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     },
@@ -102,15 +118,18 @@ app.use(errorHandler);
 
 // ============== START SERVER ==============
 
+let server;
+
 const startServer = async () => {
     try {
         // Connect to MongoDB
         await connectDB();
 
-        // Initialize Automated Payroll Scheduler
+        // Start the schedulers once, after the DB is reachable
         PayrollScheduler.init();
+        AttendanceScheduler.init();
 
-        app.listen(config.port, () => {
+        server = app.listen(config.port, () => {
             console.log(`
 ╔══════════════════════════════════════════════╗
 ║  🚀 Ravi Zoho HR & Payroll API Server       ║
@@ -126,6 +145,41 @@ const startServer = async () => {
         process.exit(1);
     }
 };
+
+/**
+ * Stop accepting new connections, let in-flight requests finish, then exit.
+ * Without this, a container restart can kill a request mid-payroll-write.
+ */
+const shutdown = (signal) => {
+    console.log(`\n${signal} received — shutting down gracefully...`);
+    if (!server) process.exit(0);
+
+    server.close(() => {
+        console.log('✅ HTTP server closed.');
+        process.exit(0);
+    });
+
+    // Don't hang forever on a stuck connection
+    setTimeout(() => {
+        console.error('⏱  Shutdown timed out — forcing exit.');
+        process.exit(1);
+    }, 15000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// An unhandled rejection or uncaught exception leaves the process in an unknown
+// state. Log it, then exit so the host restarts a clean one.
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ Unhandled promise rejection:', reason);
+    shutdown('unhandledRejection');
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught exception:', error);
+    process.exit(1);
+});
 
 startServer();
 

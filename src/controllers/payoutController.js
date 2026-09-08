@@ -177,6 +177,52 @@ class PayoutController {
     }
 
     /**
+     * GET /api/payouts/run/:runId
+     * Every payout transaction belonging to one payroll run.
+     *
+     * The run is looked up under the caller's organization first, so a runId
+     * from another tenant 404s rather than leaking its transactions.
+     */
+    static async getByRun(req, res) {
+        try {
+            const orgId = req.user?.organizationId;
+            const isSuperAdmin = String(req.user?.role || '').toLowerCase() === 'superadmin';
+
+            const runFilter = { _id: req.params.runId };
+            if (!isSuperAdmin) runFilter.organizationId = orgId;
+
+            const run = await PayrollRun.findOne(runFilter).select('payrollRecords runId month year status');
+            if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found' });
+
+            const transactions = await PayoutTransaction.find({ payrollId: { $in: run.payrollRecords || [] } })
+                .populate('employeeId', 'firstName lastName employeeId')
+                .sort('-createdAt');
+
+            const data = transactions.map(t => ({
+                _id: t._id,
+                employeeName: t.employeeId ? `${t.employeeId.firstName || ''} ${t.employeeId.lastName || ''}`.trim() : undefined,
+                employeeId: t.employeeId?.employeeId,
+                amount: t.amount,
+                razorpayPayoutId: t.razorpayPayoutId,
+                status: t.status,
+                mode: t.mode,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                failureReason: t.errorMessage,
+            }));
+
+            res.json({
+                success: true,
+                data,
+                run: { _id: run._id, runId: run.runId, month: run.month, year: run.year, status: run.status },
+            });
+        } catch (error) {
+            console.error('Payout getByRun error:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+
+    /**
      * POST /api/payouts/:id/retry
      * Re-attempt a failed payout transaction
      */

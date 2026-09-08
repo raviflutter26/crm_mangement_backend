@@ -1,6 +1,7 @@
 const Permission = require('../models/Permission');
 const User = require('../models/User');
 const permissionService = require('../services/permissionService');
+const { scopeFilter } = require('../utils/tenancy');
 
 /**
  * @desc    Apply for permission
@@ -80,7 +81,7 @@ exports.handlePermissionStatus = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Invalid status.' });
         }
 
-        const permission = await Permission.findById(req.params.id);
+        const permission = await Permission.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!permission) return res.status(404).json({ success: false, message: 'Permission request not found.' });
 
         permission.status = status;
