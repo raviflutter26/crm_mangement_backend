@@ -21,12 +21,14 @@ const salaryTemplateSchema = new mongoose.Schema(
 salaryTemplateSchema.index({ name: 1, organizationId: 1 }, { unique: true });
 
 // Ensure total is 100%
-salaryTemplateSchema.pre('save', function(next) {
+// Mongoose 9 removed the `next` callback style for middleware: the hook is
+// called with no arguments and whatever it returns is awaited.
+// Rejecting is now done by throwing, which Kareem surfaces as the save error.
+salaryTemplateSchema.pre('save', function () {
     const total = this.basicPercent + this.hraPercent + this.daPercent + this.specialAllowancePercent;
     if (total !== 100) {
-        return next(new Error('Total percentage must be exactly 100%'));
+        throw new Error('Total percentage must be exactly 100%');
     }
-    next();
 });
 
 module.exports = mongoose.model('SalaryTemplate', salaryTemplateSchema);

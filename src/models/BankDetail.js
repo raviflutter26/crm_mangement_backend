@@ -44,14 +44,12 @@ const bankDetailSchema = new mongoose.Schema({
 });
 
 // Middleware to automatically set last four digits before saving
-bankDetailSchema.pre('save', function(next) {
-    if (this.isModified('encryptedAccountNumber')) {
-        // We can't get last 4 from encrypted directly if we just changed it, 
-        // so this assumes the controller passes them or we decrypt if we have the plain text temporarily.
-        // Actually, better to have a virtual setter or just set it in controller.
-    }
-    next();
-});
+// Mongoose 9 removed the `next` callback style for middleware: the hook is
+// called with no arguments and whatever it returns is awaited.
+// The body is intentionally empty: lastFourDigits is set by the controller,
+// which still holds the plaintext account number. Kept as a placeholder for
+// where that derivation would move if the plaintext ever reaches the model.
+bankDetailSchema.pre('save', function () {});
 
 // Virtual for decrypted account number (to be used sparingly)
 bankDetailSchema.virtual('accountNumber').get(function() {

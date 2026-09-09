@@ -35,6 +35,27 @@ exports.createOrganization = async (req, res, next) => {
             });
         }
 
+        // slug is unique, so a name that normalizes to an existing slug would fail
+        // mid-create with an opaque duplicate-key error. Report it up front instead.
+        const slug = String(orgData.name).toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        if (await Organization.findOne({ slug })) {
+            return res.status(400).json({
+                success: false,
+                message: `Organization name '${orgData.name}' is already taken. Please use a different name.`
+            });
+        }
+
+        // The admin's email is unique across users. Check before the organization is
+        // created so a conflict cannot leave an organization behind with no admin.
+        const adminEmail = admin?.email?.toLowerCase() || email;
+        if (await User.findOne({ email: adminEmail })) {
+            return res.status(400).json({
+                success: false,
+                message: `A user with email ${adminEmail} already exists. Please use a different admin email.`
+            });
+        }
+
         // 1. Create the organization
         const organization = await Organization.create({
             name: orgData.name,
@@ -57,35 +78,49 @@ exports.createOrganization = async (req, res, next) => {
             tempPassword = crypto.randomBytes(4).toString('hex'); // Generate 8 char password
         }
 
-        const adminUser = await User.create({
-            firstName: admin?.firstName || 'Org',
-            lastName: admin?.lastName || 'Admin',
-            email: admin?.email?.toLowerCase() || email,
-            password: tempPassword,
-            role: 'admin',
-            organizationId: organization._id,
-            isFirstLogin: true,
-            isPasswordSet: !!admin?.password,
-            employeeId: `EMP-${Date.now().toString().slice(-4)}`,
-            status: 'Active',
-            dateOfJoining: new Date()
-        });
+        // Anything that fails from here on leaves an organization with no admin, which
+        // then blocks every retry on the "email already exists" check above. Undo the
+        // organization instead of stranding it.
+        let adminUser;
+        try {
+            adminUser = await User.create({
+                firstName: admin?.firstName || 'Org',
+                lastName: admin?.lastName || 'Admin',
+                email: adminEmail,
+                password: tempPassword,
+                role: 'admin',
+                organizationId: organization._id,
+                isFirstLogin: true,
+                isPasswordSet: !!admin?.password,
+                employeeId: `EMP-${Date.now().toString().slice(-4)}`,
+                status: 'Active',
+                dateOfJoining: new Date()
+            });
 
-        // 2.6 Create default departments for the organization
-        const Department = require('../models/Department');
-        const defaultDepts = [
-            'Management', 'Human Resources', 'Sales', 'Installation', 
-            'Engineering', 'Finance', 'Warehouse', 'Customer Support', 'IT'
-        ];
-        await Department.insertMany(defaultDepts.map(name => ({ 
-            name, 
-            organizationId: organization._id,
-            status: 'active'
-        })));
+            // 2.6 Create default departments for the organization
+            const Department = require('../models/Department');
+            const defaultDepts = [
+                'Management', 'Human Resources', 'Sales', 'Installation',
+                'Engineering', 'Finance', 'Warehouse', 'Customer Support', 'IT'
+            ];
+            await Department.insertMany(defaultDepts.map(name => ({
+                name,
+                organizationId: organization._id,
+                status: 'active'
+            })));
 
-        // 3. Link organization to its creator
-        organization.createdBy = adminUser._id;
-        await organization.save();
+            // 3. Link organization to its creator
+            organization.createdBy = adminUser._id;
+            await organization.save();
+        } catch (setupErr) {
+            await Organization.deleteOne({ _id: organization._id }).catch(() => {});
+            if (adminUser) {
+                await User.deleteOne({ _id: adminUser._id }).catch(() => {});
+            }
+            const Department = require('../models/Department');
+            await Department.deleteMany({ organizationId: organization._id }).catch(() => {});
+            throw setupErr;
+        }
 
         // 4. Dispatch Onboarding Email
         try {

@@ -13,9 +13,10 @@ const siteAllowanceSchema = new mongoose.Schema({
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
 }, { timestamps: true });
 
-siteAllowanceSchema.pre('save', function(next) {
+// Mongoose 9 removed the `next` callback style for middleware: the hook is
+// called with no arguments and whatever it returns is awaited.
+siteAllowanceSchema.pre('save', function () {
     this.totalAmount = this.days * this.rate;
-    next();
 });
 
 module.exports = mongoose.model('SiteAllowance', siteAllowanceSchema);

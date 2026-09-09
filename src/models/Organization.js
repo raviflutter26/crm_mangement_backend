@@ -26,6 +26,9 @@ const OrganizationSchema = new mongoose.Schema({
         attendance: {
             workingDays: { type: [String], default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
             workingHours: { type: Number, default: 8 },
+            timezone: { type: String, default: 'Asia/Kolkata' },
+            defaultStartTime: { type: String, default: '09:00' },
+            defaultEndTime: { type: String, default: '18:00' },
             graceMinutes: { type: Number, default: 15 },
             overtimeEnabled: { type: Boolean, default: false },
             halfDayHours: { type: Number, default: 4 }
@@ -33,6 +36,7 @@ const OrganizationSchema = new mongoose.Schema({
         payroll: {
             payDay: { type: Number, default: 1 },
             currency: { type: String, default: 'INR' },
+            payrollCycle: { type: String, default: 'Monthly' },
             epfEnabled: { type: Boolean, default: true },
             esiEnabled: { type: Boolean, default: true },
             ptEnabled: { type: Boolean, default: true },

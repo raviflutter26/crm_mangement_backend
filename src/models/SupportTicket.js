@@ -16,13 +16,14 @@ const supportTicketSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Auto-generate ticket ID
-supportTicketSchema.pre('save', async function (next) {
+// Mongoose 9 removed the `next` callback style for middleware: the hook is
+// called with no arguments and whatever it returns is awaited.
+supportTicketSchema.pre('save', async function () {
     if (!this.ticketId) {
         // Sequence is per organization so ticket numbers don't leak platform-wide volume.
         const count = await mongoose.model('SupportTicket').countDocuments({ organizationId: this.organizationId });
         this.ticketId = `TKT-${String(count + 1).padStart(5, '0')}`;
     }
-    next();
 });
 
 module.exports = mongoose.model('SupportTicket', supportTicketSchema);
