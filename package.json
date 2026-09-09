@@ -8,7 +8,9 @@
     "dev": "nodemon src/server.js",
     "build": "tsc",
     "test": "node --test test/",
-    "test:watch": "node --test --watch test/"
+    "test:watch": "node --test --watch test/",
+    "sweep": "node src/tools/apiSweep/cli.js",
+    "sweep:seed": "node src/tools/apiSweep/seedQaUsers.js"
   },
   "keywords": [
     "zoho",
