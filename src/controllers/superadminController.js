@@ -3,6 +3,7 @@ const AuditLog = require('../models/AuditLog');
 const Invitation = require('../models/Invitation');
 const Organization = require('../models/Organization');
 const SupportTicket = require('../models/SupportTicket');
+const DemoRequest = require('../models/DemoRequest');
 const mongoose = require('mongoose');
 
 /**
@@ -284,18 +285,20 @@ exports.getSidebarCounts = async (req, res, next) => {
             criticalLogs,
             lockedAccounts,
             pendingInvites,
-            openTickets
+            openTickets,
+            newDemoRequests
         ] = await Promise.all([
             Organization.countDocuments({ status: 'pending' }),
             AuditLog.countDocuments({ "details.severity": "Critical" }), // Can refine with date range if needed
-            User.countDocuments({ 
+            User.countDocuments({
                 $or: [
                     { lockUntil: { $gt: Date.now() } },
                     { isActive: false }
                 ]
             }),
             Invitation.countDocuments({ status: 'pending' }),
-            SupportTicket.countDocuments({ status: { $ne: 'resolved' } })
+            SupportTicket.countDocuments({ status: { $ne: 'resolved' } }),
+            DemoRequest.countDocuments({ status: 'new' })
         ]);
 
         const dbStatus = mongoose.connection.readyState === 1 ? 'OK' : 'ERR';
@@ -308,6 +311,7 @@ exports.getSidebarCounts = async (req, res, next) => {
                 lockedAccounts,
                 pendingInvites,
                 openTickets,
+                newDemoRequests,
                 systemHealth: dbStatus
             }
         });

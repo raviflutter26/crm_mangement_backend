@@ -35,6 +35,7 @@ const invitationRoutes = require('./invitationRoutes');
 const systemHealthRoutes = require('./systemHealthRoutes');
 const masterRoutes = require('./masterRoutes');
 const superadminRoutes = require('./superadminRoutes');
+const demoRequestRoutes = require('./demoRequestRoutes');
 const leavePolicyRoutes = require('./leavePolicyRoutes');
 const permissionConfigRoutes = require('./permissionConfigRoutes');
 
@@ -94,6 +95,7 @@ router.use('/salary-components', salaryComponentRoutes);
 router.use('/invitations', invitationRoutes);
 router.use('/master', masterRoutes);
 router.use('/superadmin', superadminRoutes);
+router.use('/demo-requests', demoRequestRoutes);
 router.use('/system', systemHealthRoutes);
 
 // Admin Config Routes

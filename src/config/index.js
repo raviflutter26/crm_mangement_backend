@@ -74,7 +74,8 @@ const config = {
         'http://localhost:3001',
         'http://127.0.0.1:3000',
         'https://crm-mangement-website-eight.vercel.app',
-        process.env.WEBSITE_URL
+        process.env.WEBSITE_URL,
+        process.env.MARKETING_SITE_URL
       ].filter(Boolean);
 
       if (allowedOrigins.includes(origin)) {
