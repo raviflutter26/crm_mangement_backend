@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const branchScope = require('./plugins/branchScope');
 
 const leaveSchema = new mongoose.Schema(
     {
@@ -82,5 +83,10 @@ const leaveSchema = new mongoose.Schema(
 );
 
 leaveSchema.index({ employee: 1, status: 1 });
+leaveSchema.index({ organizationId: 1, branchId: 1, status: 1 });
+
+// Adds branchId and fills it from the employee's posting branch, so a
+// branch-scoped HR sees only their own branch's rows.
+leaveSchema.plugin(branchScope);
 
 module.exports = mongoose.model('Leave', leaveSchema);

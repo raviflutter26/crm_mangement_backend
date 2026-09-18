@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate: auth } = require('../middleware/auth');
+const { authenticate: auth, selfService } = require('../middleware/auth');
 const ctrl = require('../controllers/supportController');
 
-router.get('/', auth, ctrl.getTickets);
-router.post('/', auth, ctrl.createTicket);
-router.put('/:id', auth, ctrl.updateTicket);
-router.delete('/:id', auth, ctrl.deleteTicket);
-router.patch('/:id/status', auth, ctrl.updateTicketStatus);
+router.get('/', selfService('anyone may raise and track a support ticket'), auth, ctrl.getTickets);
+router.post('/', selfService('anyone may raise and track a support ticket'), auth, ctrl.createTicket);
+router.put('/:id', selfService('anyone may raise and track a support ticket'), auth, ctrl.updateTicket);
+router.delete('/:id', selfService('anyone may raise and track a support ticket'), auth, ctrl.deleteTicket);
+router.patch('/:id/status', selfService('anyone may raise and track a support ticket'), auth, ctrl.updateTicketStatus);
 
 module.exports = router;

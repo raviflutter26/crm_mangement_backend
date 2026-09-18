@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const branchScope = require('./plugins/branchScope');
 
 const attendanceSchema = new mongoose.Schema(
     {
@@ -106,5 +107,10 @@ const attendanceSchema = new mongoose.Schema(
 );
 
 attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ organizationId: 1, branchId: 1, date: 1 });
+
+// Adds branchId and fills it from the employee's posting branch, so a
+// branch-scoped HR sees only their own branch's rows.
+attendanceSchema.plugin(branchScope);
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

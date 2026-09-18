@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const statutoryController = require('../controllers/statutoryController');
-const { authenticate, authorize } = require('../middleware/auth'); // Fixed path and exports
+const { authenticate, authorize, selfService } = require('../middleware/auth');
 
 // Global Config
-router.get('/config', authenticate, statutoryController.getStatutoryConfig);
+router.get('/config', authenticate, authorize('owner', 'admin', 'hr'), statutoryController.getStatutoryConfig);
 router.put('/config/epf', authenticate, authorize('admin', 'hr'), statutoryController.updateEPFConfig);
 router.put('/config/esi', authenticate, authorize('admin', 'hr'), statutoryController.updateESIConfig);
 router.put('/config/pt', authenticate, authorize('admin', 'hr'), statutoryController.updatePTConfig);
@@ -12,7 +12,8 @@ router.put('/config/lwf', authenticate, authorize('admin', 'hr'), statutoryContr
 router.put('/config/bonus', authenticate, authorize('admin', 'hr'), statutoryController.updateBonusConfig);
 
 // Employee settings
-router.get('/employee/:employeeId', authenticate, statutoryController.getEmployeeStatutory);
+// An employee may read only their own; the handler enforces self and tenant.
+router.get('/employee/:employeeId', authenticate, selfService('own statutory details; handler checks self and tenant'), statutoryController.getEmployeeStatutory);
 router.put('/employee/:employeeId', authenticate, authorize('admin', 'hr'), statutoryController.updateEmployeeStatutory);
 
 // Calculations & Slabs
@@ -23,6 +24,6 @@ router.post('/epf/calculate', (req, res) => {
     const result = calculateEPF(pfWage || 0, config || {});
     res.json({ success: true, data: result });
 });
-router.get('/pt/slabs/:state', authenticate, statutoryController.getPTSlabs);
+router.get('/pt/slabs/:state', authenticate, selfService('professional tax slabs are public reference data'), statutoryController.getPTSlabs);
 
 module.exports = router;

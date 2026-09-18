@@ -95,6 +95,14 @@ exports.updateBonusConfig = updateSection('statutoryBonus');
  */
 exports.getEmployeeStatutory = async (req, res) => {
     try {
+        // An employee may read only their own statutory details. Tenant scoping
+        // below already stopped cross-tenant reads, but within a tenant any
+        // colleague could still pull someone else's PF, UAN and ESI numbers.
+        const role = (req.user?.role || '').toLowerCase();
+        if (role === 'employee' && String(req.params.employeeId) !== String(req.user._id)) {
+            return res.status(403).json({ success: false, message: 'You may only view your own statutory details.' });
+        }
+
         // employeeId is client-supplied: constrain it to the caller's organization
         // so PF/UAN/ESI numbers can't be read across tenants.
         const employee = await User.findOne({

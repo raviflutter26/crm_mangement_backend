@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const goalSchema = new mongoose.Schema({
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -20,5 +21,10 @@ const goalSchema = new mongoose.Schema({
     }],
     weightage: { type: Number, default: 0 }
 }, { timestamps: true });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+goalSchema.plugin(branchScope);
 
 module.exports = mongoose.model('Goal', goalSchema);

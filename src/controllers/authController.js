@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const SsoConfig = require('../models/SsoConfig');
+const Organization = require('../models/Organization');
 const config = require('../config');
 const { sendEmail } = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
@@ -523,6 +524,9 @@ exports.changePassword = async (req, res, next) => {
  * @desc    Get all users (Admin only)
  * @route   GET /api/auth/users
  */
+/** A user-supplied term, safe to put in a regex. */
+const searchRegex = (term) => new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
 exports.getAllUsers = async (req, res, next) => {
     try {
         // Scoped to the caller's organization: unscoped, this returned every
@@ -530,7 +534,35 @@ exports.getAllUsers = async (req, res, next) => {
         const filter = isSuperAdmin(req)
             ? (req.query.organizationId ? { organizationId: req.query.organizationId } : {})
             : { organizationId: req.user?.organizationId };
-        const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
+
+        // The Global Users screen sends ?search= on every keystroke. Without
+        // this the box typed, fired a request, and the list never changed —
+        // the search worked visually and did nothing at all.
+        const term = String(req.query.search || '').trim();
+        if (term) {
+            const re = searchRegex(term);
+            const or = [{ firstName: re }, { lastName: re }, { email: re }, { employeeId: re }];
+
+            // The placeholder promises "name, email, or organization", and
+            // organizationId is a reference — a regex cannot reach the name
+            // through it, so the matching organizations are resolved to ids
+            // first. Skipped for non-superadmins, who are pinned to one org
+            // anyway and must not widen their scope through the search box.
+            if (isSuperAdmin(req)) {
+                const orgIds = await Organization.find({ name: re }).distinct('_id');
+                if (orgIds.length) or.push({ organizationId: { $in: orgIds } });
+            }
+            filter.$or = or;
+        }
+
+        // The screen asks for 50. Honouring it keeps one tenant's user list
+        // from becoming an unbounded response as headcount grows.
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+        const users = await User.find(filter)
+            .select('-password')
+            .sort({ createdAt: -1 })
+            .limit(limit);
         res.status(200).json({ success: true, data: users });
     } catch (error) {
         next(error);

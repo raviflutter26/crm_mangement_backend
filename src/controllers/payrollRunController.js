@@ -1,5 +1,11 @@
 const mongoose = require('mongoose');
+// Tenant scoping comes from src/utils/tenancy.js rather than a bare
+// { organizationId: req.user.organizationId }. That pattern fails OPEN when the
+// value is undefined — Mongoose drops undefined keys, leaving a match-all filter
+// across every tenant. scopeFilter returns a provably-empty filter instead, and
+// withOrg strips any client-supplied tenant key before stamping the trusted one.
 const PayrollRun = require('../models/PayrollRun');
+const { scopeFilter, withOrg } = require('../utils/tenancy');
 const Payroll = require('../models/Payroll');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
@@ -11,7 +17,7 @@ const { logAction } = require('../utils/auditLogger');
 exports.getPayrollRuns = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const runs = await PayrollRun.find({ organizationId: orgId })
+        const runs = await PayrollRun.find(scopeFilter(req))
             .populate('initiatedBy', 'name email')
             .populate('approvedBy', 'name email')
             .sort('-year -month');
@@ -23,7 +29,7 @@ exports.getPayrollRuns = async (req, res, next) => {
 exports.getPayrollRunById = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId })
+        const run = await PayrollRun.findOne({ _id: req.params.id, ...scopeFilter(req) })
             .populate('payrollRecords')
             .populate('initiatedBy', 'name email')
             .populate('approvedBy', 'name email');
@@ -45,7 +51,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
         if (!orgId) return res.status(400).json({ success: false, message: 'Organization context is missing.' });
 
         // Check for existing run
-        const existing = await PayrollRun.findOne({ month: parseInt(month), year: parseInt(year), organizationId: orgId });
+        const existing = await PayrollRun.findOne({ month: parseInt(month), year: parseInt(year), ...scopeFilter(req) });
         if (existing) return res.status(400).json({ success: false, message: `Payroll run already exists for ${month}/${year}. RunID: ${existing.runId}` });
 
         // Get statutory config
@@ -55,7 +61,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
         }
 
         // Get all active employees in THIS organization
-        const employees = await User.find({ status: 'Active', organizationId: orgId });
+        const employees = await User.find({ status: 'Active', ...scopeFilter(req) });
         if (employees.length === 0) return res.status(400).json({ success: false, message: 'No active employees found.' });
 
         // Calculate working days in the month
@@ -181,7 +187,7 @@ exports.initiatePayrollRun = async (req, res, next) => {
 exports.approvePayrollRun = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        const run = await PayrollRun.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status !== 'review') return res.status(400).json({ success: false, message: `Cannot approve a run with status '${run.status}'.` });
 
@@ -204,7 +210,7 @@ exports.approvePayrollRun = async (req, res, next) => {
 exports.lockPayrollRun = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        const run = await PayrollRun.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status !== 'approved') return res.status(400).json({ success: false, message: `Cannot lock a run with status '${run.status}'. It must be approved first.` });
 
@@ -227,7 +233,7 @@ exports.lockPayrollRun = async (req, res, next) => {
 exports.markAsPaid = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        const run = await PayrollRun.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status !== 'approved') return res.status(400).json({ success: false, message: 'Run must be approved first.' });
 
@@ -250,7 +256,7 @@ exports.markAsPaid = async (req, res, next) => {
 exports.deletePayrollRun = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const run = await PayrollRun.findOne({ _id: req.params.id, organizationId: orgId });
+        const run = await PayrollRun.findOne({ _id: req.params.id, ...scopeFilter(req) });
         if (!run) return res.status(404).json({ success: false, message: 'Payroll run not found for your organization.' });
         if (run.status === 'paid') return res.status(400).json({ success: false, message: 'Cannot delete a paid payroll run.' });
 

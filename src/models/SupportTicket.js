@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const supportTicketSchema = new mongoose.Schema({
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     ticketId: { type: String, trim: true },
@@ -25,5 +26,10 @@ supportTicketSchema.pre('save', async function () {
         this.ticketId = `TKT-${String(count + 1).padStart(5, '0')}`;
     }
 });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+supportTicketSchema.plugin(branchScope);
 
 module.exports = mongoose.model('SupportTicket', supportTicketSchema);

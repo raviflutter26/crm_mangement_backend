@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const payrollSchema = new mongoose.Schema(
     {
         employee: {
@@ -133,5 +134,10 @@ payrollSchema.pre('save', async function () {
 
     this.netPay = this.totalEarnings - this.totalDeductions;
 });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+payrollSchema.plugin(branchScope);
 
 module.exports = mongoose.model('Payroll', payrollSchema);

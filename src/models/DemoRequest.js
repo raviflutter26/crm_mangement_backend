@@ -2,8 +2,11 @@ const mongoose = require('mongoose');
 
 const DemoRequestSchema = new mongoose.Schema({
     name: { type: String, required: true, trim: true },
-    company: { type: String, required: true, trim: true },
+    // Optional since the marketing lead form dropped the Company field to cut
+    // friction. Leads captured before that change still carry it.
+    company: { type: String, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },
+    phone: { type: String, trim: true },
     teamSize: { type: String, trim: true },
     message: { type: String, trim: true },
     source: { type: String, default: 'marketing-website' },

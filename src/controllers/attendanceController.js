@@ -8,7 +8,7 @@ const attendanceConfigService = require('../services/attendanceConfigService');
 const permissionService = require('../services/permissionService');
 const zohoPeopleService = require('../services/zohoPeopleService');
 const { sendEmail } = require('../services/emailService');
-const { scopeFilter } = require('../utils/tenancy');
+const { scopeFilter, scopeLevelFor } = require('../utils/tenancy');
 
 /**
  * @desc    Get all attendance records
@@ -251,8 +251,10 @@ exports.getTodaySummary = async (req, res, next) => {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         
-        // If employee, do not expose stats
-        if (req.user && req.user.role === 'Employee') {
+        // If employee, do not expose stats. Compared against the lowercase role:
+        // the old check read `=== 'Employee'`, which stopped matching once roles
+        // were normalized, so employees were being served real figures.
+        if (scopeLevelFor(req) === 'self') {
             return res.status(200).json({
                 success: true,
                 data: {
@@ -260,13 +262,24 @@ exports.getTodaySummary = async (req, res, next) => {
                 },
             });
         }
-        
-        // Base queries — use range to avoid timezone mismatch
-        let userQuery = { status: 'Active' };
-        let attQuery = { date: { $gte: today, $lt: tomorrow } };
 
-        if (req.user && req.user.role === 'Manager') {
+        // Base queries — use range to avoid timezone mismatch.
+        // Both are tenant-scoped: without scopeFilter these counted every
+        // organization's Active users and attendance rows into one customer's
+        // dashboard. User.branchId is the posting branch, so branch narrowing
+        // reads the same way on both collections.
+        const scope = scopeFilter(req, { branch: true, department: true });
+        let userQuery = { ...scope, status: 'Active' };
+        let attQuery = { ...scope, date: { $gte: today, $lt: tomorrow } };
+
+        if (scopeLevelFor(req) === 'department') {
+            // The scope above now narrows a manager to their own department.
+            // This intersects that with their direct reports, because the
+            // dashboard is a "my team" widget rather than a department roster —
+            // seeing the department and being accountable for it are different
+            // things, and only the second belongs on this tile.
             const allowedEmps = await User.find({
+                ...scope,
                 $or: [{ reportingManager: req.user._id }, { _id: req.user._id }]
             }).select('_id');
             const allowedIds = allowedEmps.map(e => e._id);
@@ -314,7 +327,9 @@ exports.getTodaySummary = async (req, res, next) => {
 exports.requestRegularization = async (req, res, next) => {
     try {
         const { attendanceId, reason } = req.body;
-        const record = await Attendance.findById(attendanceId);
+        // Scoped: an unscoped findById let any authenticated user flag any
+        // attendance row in any organization for regularization.
+        const record = await Attendance.findOne({ _id: attendanceId, ...scopeFilter(req, { branch: true }) });
         if (!record) return res.status(404).json({ success: false, message: 'Record not found.' });
 
         record.regularizationStatus = 'pending';
@@ -336,7 +351,14 @@ exports.requestRegularization = async (req, res, next) => {
                     }
                 });
             } else {
-                const admins = await User.find({ role: { $in: ['Admin', 'HR'] } }).select('email firstName lastName');
+                // Confined to the employee's own organization. This previously
+                // selected admins across every tenant, which would have mailed
+                // one customer's employee names to another's HR — masked only by
+                // the roles being listed in a casing that no longer matches.
+                const admins = await User.find({
+                    organizationId: record.organizationId,
+                    role: { $in: ['admin', 'hr', 'owner'] },
+                }).select('email firstName lastName');
                 for (const admin of admins) {
                     await sendEmail({
                         to: admin.email,
@@ -363,7 +385,7 @@ exports.requestRegularization = async (req, res, next) => {
 exports.handleRegularization = async (req, res, next) => {
     try {
         const { status, checkIn, checkOut } = req.body;
-        const record = await Attendance.findOne({ _id: req.params.id, ...scopeFilter(req) });
+        const record = await Attendance.findOne({ _id: req.params.id, ...scopeFilter(req, { branch: true }) });
         if (!record) return res.status(404).json({ success: false, message: 'Record not found.' });
 
         if (status === 'approved') {

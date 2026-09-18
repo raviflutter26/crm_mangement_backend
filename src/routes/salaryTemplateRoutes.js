@@ -6,10 +6,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 
 router.route('/')
-    .get(salaryTemplateController.getTemplates)
+    .get(authorize('owner', 'admin', 'hr'), salaryTemplateController.getTemplates)
     .post(authorize('Admin', 'HR'), salaryTemplateController.saveTemplate);
 
-router.post('/calculate', salaryTemplateController.calculateBreakdown);
+router.post('/calculate', authorize('owner', 'admin', 'hr'), salaryTemplateController.calculateBreakdown);
 
 router.delete('/:id', authorize('Admin', 'HR'), salaryTemplateController.deleteTemplate);
 

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const payoutTransactionSchema = new mongoose.Schema({
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     payrollId: {
@@ -58,5 +59,10 @@ const payoutTransactionSchema = new mongoose.Schema({
 // payoutTransactionSchema.index({ razorpayPayoutId: 1 }); // Redundant, razorpayPayoutId has index: true above
 payoutTransactionSchema.index({ payrollId: 1, employeeId: 1 });
 payoutTransactionSchema.index({ organizationId: 1, createdAt: -1 });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+payoutTransactionSchema.plugin(branchScope, { employeePath: 'employeeId' });
 
 module.exports = mongoose.model('PayoutTransaction', payoutTransactionSchema);

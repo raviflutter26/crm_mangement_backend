@@ -9,12 +9,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 exports.createDemoRequest = async (req, res, next) => {
     try {
-        const { name, company, email, teamSize, message } = req.body;
+        const { name, company, email, phone, teamSize, message } = req.body;
 
-        if (!name || !company || !email) {
+        // Company is no longer required: the lead form asks for name, work
+        // email, phone and team size only, and rejecting a lead for a field we
+        // stopped asking for would silently lose every submission.
+        if (!name || !email) {
             return res.status(400).json({
                 success: false,
-                message: 'Name, company and work email are required.'
+                message: 'Name and work email are required.'
             });
         }
         if (!EMAIL_RE.test(email)) {
@@ -26,8 +29,9 @@ exports.createDemoRequest = async (req, res, next) => {
 
         const demoRequest = await DemoRequest.create({
             name: String(name).trim(),
-            company: String(company).trim(),
+            company: company ? String(company).trim() : undefined,
             email: String(email).trim().toLowerCase(),
+            phone: phone ? String(phone).trim() : undefined,
             teamSize: teamSize ? String(teamSize).trim() : undefined,
             message: message ? String(message).trim() : undefined
         });

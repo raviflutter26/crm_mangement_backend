@@ -82,8 +82,14 @@ async function closeBackgroundHandles() {
 
 const User = require('../src/models/User');
 
-/** Create a real User row, since authenticate() looks the token's subject up. */
-async function makeUser({ role = 'admin', organizationId = null, isActive = true } = {}) {
+/**
+ * Create a real User row, since authenticate() looks the token's subject up.
+ *
+ * Any other field (branchIds, branchId, departmentId, isGroupWide) passes
+ * straight through, which is what lets a test build a branch- or
+ * department-scoped caller rather than only a tenant-wide one.
+ */
+async function makeUser({ role = 'admin', organizationId = null, isActive = true, ...rest } = {}) {
     return User.create({
         firstName: 'Test',
         lastName: role,
@@ -92,6 +98,7 @@ async function makeUser({ role = 'admin', organizationId = null, isActive = true
         role,
         organizationId,
         isActive,
+        ...rest,
     });
 }
 

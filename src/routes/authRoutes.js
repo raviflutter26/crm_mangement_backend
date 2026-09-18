@@ -2,7 +2,7 @@ const express = require('express');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, selfService } = require('../middleware/auth');
 
 /**
  * Credential endpoints need a far tighter budget than the global /api limiter
@@ -36,27 +36,27 @@ const passwordResetLimiter = rateLimit({
     },
 });
 
-router.post('/register', credentialLimiter, authController.register);
-router.post('/login', credentialLimiter, authController.login);
-router.get('/me', authenticate, authController.getMe);
-router.put('/profile', authenticate, authController.updateProfile);
-router.put('/change-password', authenticate, credentialLimiter, authController.changePassword);
-router.post('/forgot-password', passwordResetLimiter, authController.forgotPassword);
-router.post('/create-password', credentialLimiter, authController.createPassword);
-router.get('/reset-password/:resettoken', authController.verifyResetToken);
-router.put('/reset-password/:resettoken', credentialLimiter, authController.resetPassword);
+router.post('/register', selfService('own account'), credentialLimiter, authController.register);
+router.post('/login', selfService('own account'), credentialLimiter, authController.login);
+router.get('/me', selfService('own account'), authenticate, authController.getMe);
+router.put('/profile', selfService('own account'), authenticate, authController.updateProfile);
+router.put('/change-password', selfService('own account'), authenticate, credentialLimiter, authController.changePassword);
+router.post('/forgot-password', selfService('own account'), passwordResetLimiter, authController.forgotPassword);
+router.post('/create-password', selfService('own account'), credentialLimiter, authController.createPassword);
+router.get('/reset-password/:resettoken', selfService('own account'), authController.verifyResetToken);
+router.put('/reset-password/:resettoken', selfService('own account'), credentialLimiter, authController.resetPassword);
 
 // MFA
 // MFA codes are 6 digits — without a limit they are brute-forceable in minutes.
-router.post('/mfa/challenge', credentialLimiter, authController.mfaChallenge); // completes login, uses a preAuthToken instead of a full session
-router.post('/mfa/setup', authenticate, authController.mfaSetup);
-router.post('/mfa/verify', authenticate, authController.mfaVerify);
-router.post('/mfa/disable', authenticate, authController.mfaDisable);
+router.post('/mfa/challenge', selfService('own account'), credentialLimiter, authController.mfaChallenge); // completes login, uses a preAuthToken instead of a full session
+router.post('/mfa/setup', selfService('own account'), authenticate, authController.mfaSetup);
+router.post('/mfa/verify', selfService('own account'), authenticate, authController.mfaVerify);
+router.post('/mfa/disable', selfService('own account'), authenticate, authController.mfaDisable);
 
 // Sessions
-router.get('/sessions', authenticate, authController.getSessions);
-router.delete('/sessions/:id', authenticate, authController.revokeSession);
-router.post('/sessions/revoke-all', authenticate, authController.revokeAllSessions);
+router.get('/sessions', selfService('own account'), authenticate, authController.getSessions);
+router.delete('/sessions/:id', selfService('own account'), authenticate, authController.revokeSession);
+router.post('/sessions/revoke-all', selfService('own account'), authenticate, authController.revokeAllSessions);
 
 // SSO configuration (admin only — settings management, no live provider connection)
 router.get('/sso-config', authenticate, authorize('admin'), authController.getSsoConfig);

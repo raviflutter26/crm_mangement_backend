@@ -3,6 +3,7 @@ const User = require('../models/User');
 const LeaveBalance = require('../models/LeaveBalance');
 const leaveService = require('../services/leaveService');
 const { sendEmail } = require('../services/emailService');
+const { scopeFilter, scopeLevelFor } = require('../utils/tenancy');
 
 /**
  * @desc    Apply for leave
@@ -63,10 +64,16 @@ exports.applyLeave = async (req, res, next) => {
 exports.getLeaves = async (req, res, next) => {
     try {
         const { page = 1, limit = 20, employee, status, leaveType } = req.query;
-        const query = { organizationId: req.orgId || req.user.organizationId };
-        const role = (req.user.role || '').toLowerCase();
+        // Tenant scope comes from the shared helper rather than a hand-rolled
+        // organizationId, so a caller with no organization fails closed instead
+        // of matching every tenant's rows.
+        // Branch AND department: a manager lists their own department's leave,
+        // not their whole branch's. Approval is a separate check on
+        // reportingManager — seeing a request and being able to decide it are
+        // deliberately different permissions.
+        const query = { ...scopeFilter(req, { branch: true, department: true }) };
 
-        if (role === 'employee') {
+        if (scopeLevelFor(req) === 'self') {
             query.employee = req.user._id;
         } else if (employee) {
             query.employee = employee;
@@ -140,6 +147,11 @@ exports.getLeaveBalance = async (req, res, next) => {
         const role = (req.user.role || '').toLowerCase();
         if (role !== 'superadmin' && String(employee.organizationId || '') !== String(req.user.organizationId || '')) {
             return res.status(403).json({ success: false, message: 'Not authorized to view this employee\'s leave balance.' });
+        }
+
+        // Within a tenant, an employee may look up only their own balance.
+        if (role === 'employee' && String(employeeId) !== String(req.user._id)) {
+            return res.status(403).json({ success: false, message: 'You may only view your own leave balance.' });
         }
 
         const year = parseInt(req.query.year) || new Date().getFullYear();

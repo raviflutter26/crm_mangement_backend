@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const payoutController = require('../controllers/payoutController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, selfService } = require('../middleware/auth');
 
 // Protected Routes (Admin/HR only)
 router.use(authenticate);
@@ -43,6 +43,8 @@ router.post('/initiate', authorize('Admin', 'HR'), payoutController.initiatePayo
 router.post('/prepare/:employeeId', authorize('Admin', 'HR'), payoutController.prepareEmployee);
 
 // Webhook Route (Unprotected, but should have signature verification in controller)
-router.post('/webhook', payoutController.handleWebhook);
+// Provider callback from RazorpayX. It sits behind authenticate today, which a
+// provider cannot satisfy — signature verification is the right control here.
+router.post('/webhook', selfService('payment-provider callback; needs signature verification, not a role'), payoutController.handleWebhook);
 
 module.exports = router;

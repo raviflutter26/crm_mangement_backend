@@ -7,7 +7,7 @@ const { sendEmail } = require('../services/emailService');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
-const { isSuperAdmin, requireOwnOrg } = require('../utils/tenancy');
+const { isSuperAdmin, requireOwnOrg, scopeFilter, withOrg } = require('../utils/tenancy');
 
 /**
  * @desc    Create a new organization
@@ -89,6 +89,9 @@ exports.createOrganization = async (req, res, next) => {
                 email: adminEmail,
                 password: tempPassword,
                 role: 'admin',
+                // The organization's first administrator predates its branches,
+                // so they are group-wide by definition rather than by omission.
+                isGroupWide: true,
                 organizationId: organization._id,
                 isFirstLogin: true,
                 isPasswordSet: !!admin?.password,
@@ -170,6 +173,15 @@ exports.getOrganizations = async (req, res, next) => {
     try {
         const { search, status, planType, sort = 'newest', page = 1, limit = 10 } = req.query;
         const query = { deletedAt: null }; // Soft delete filter
+
+        // This is the platform's customer list. Without this it returned every
+        // organization on the platform — name, email and plan — to any
+        // authenticated user of any tenant. A tenant user sees only their own.
+        if (!isSuperAdmin(req)) {
+            const own = req.user?.organizationId;
+            if (!own) return res.status(200).json({ success: true, data: [], count: 0, total: 0 });
+            query._id = own;
+        }
 
         if (search) {
             query.$or = [
@@ -374,8 +386,10 @@ exports.impersonateOrganization = async (req, res, next) => {
 exports.getDesignations = async (req, res, next) => {
     try {
         const query = { isActive: true };
-        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
-        if (orgId) query.organizationId = orgId;
+        // Never read the tenant off the query string: any signed-in user could
+        // pass another organization's id and receive its rows. scopeFilter takes
+        // the tenant from the token and honours the superadmin exception.
+        Object.assign(query, scopeFilter(req));
         
         const designations = await Designation.find(query).sort({ level: 1 });
         res.status(200).json({ success: true, data: designations });
@@ -384,10 +398,7 @@ exports.getDesignations = async (req, res, next) => {
 
 exports.createDesignation = async (req, res, next) => {
     try {
-        const designation = await Designation.create({
-            ...req.body,
-            organizationId: req.user.organizationId
-        });
+        const designation = await Designation.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: designation });
     } catch (error) { next(error); }
 };
@@ -396,8 +407,10 @@ exports.createDesignation = async (req, res, next) => {
 exports.getBranches = async (req, res, next) => {
     try {
         const query = { isActive: true };
-        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
-        if (orgId) query.organizationId = orgId;
+        // Never read the tenant off the query string: any signed-in user could
+        // pass another organization's id and receive its rows. scopeFilter takes
+        // the tenant from the token and honours the superadmin exception.
+        Object.assign(query, scopeFilter(req));
 
         const branches = await Branch.find(query).sort({ name: 1 });
         res.status(200).json({ success: true, data: branches });
@@ -406,10 +419,7 @@ exports.getBranches = async (req, res, next) => {
 
 exports.createBranch = async (req, res, next) => {
     try {
-        const branch = await Branch.create({
-            ...req.body,
-            organizationId: req.user.organizationId
-        });
+        const branch = await Branch.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: branch });
     } catch (error) { next(error); }
 };
@@ -419,8 +429,10 @@ exports.getHolidays = async (req, res, next) => {
     try {
         const year = req.query.year || new Date().getFullYear();
         const query = { year: parseInt(year) };
-        const orgId = req.query.organizationId || (req.user && req.user.organizationId);
-        if (orgId) query.organizationId = orgId;
+        // Never read the tenant off the query string: any signed-in user could
+        // pass another organization's id and receive its rows. scopeFilter takes
+        // the tenant from the token and honours the superadmin exception.
+        Object.assign(query, scopeFilter(req));
 
         const holidays = await Holiday.find(query).sort({ date: 1 });
         res.status(200).json({ success: true, data: holidays });
@@ -429,10 +441,7 @@ exports.getHolidays = async (req, res, next) => {
 
 exports.createHoliday = async (req, res, next) => {
     try {
-        const holiday = await Holiday.create({
-            ...req.body,
-            organizationId: req.user.organizationId
-        });
+        const holiday = await Holiday.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: holiday });
     } catch (error) { next(error); }
 };

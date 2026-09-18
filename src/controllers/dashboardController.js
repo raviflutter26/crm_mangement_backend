@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { scopeFilter } = require('../utils/tenancy');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Payroll = require('../models/Payroll');
@@ -90,7 +91,9 @@ exports.getDashboard = async (req, res, next) => {
         }
 
         // Admin / HR / Manager stats logic
-        let employeeQuery = req.user.organizationId ? { organizationId: req.user.organizationId } : {};
+        // Fails closed for a tenant user with no organization; the ternary this
+        // replaces returned {}, which read across every tenant.
+        let employeeQuery = { ...scopeFilter(req) };
         let attendanceQuery = { date: { $gte: startDate, $lte: endDate } };
         let leaveQuery = {};
         let payrollStatsQuery = filter === 'year' ? { year: currentYear } : { month: currentMonth, year: currentYear };
@@ -181,19 +184,19 @@ exports.getDashboard = async (req, res, next) => {
         ]);
 
         // Projects & Sites
-        const projects = await Project.find({ organizationId: req.user.organizationId, status: 'In Progress' })
+        const projects = await Project.find({ ...scopeFilter(req), status: 'In Progress' })
             .limit(5)
             .select('name status site');
 
         // Incidents
-        const recentIncidents = await Incident.find({ organizationId: req.user.organizationId })
+        const recentIncidents = await Incident.find(scopeFilter(req))
             .sort('-createdAt')
             .limit(3);
         
         const incidentStats = {
-            total: await Incident.countDocuments({ organizationId: req.user.organizationId }),
-            open: await Incident.countDocuments({ organizationId: req.user.organizationId, status: { $in: ['Reported', 'In-Progress'] } }),
-            closed: await Incident.countDocuments({ organizationId: req.user.organizationId, status: { $in: ['Resolved', 'Closed'] } })
+            total: await Incident.countDocuments(scopeFilter(req)),
+            open: await Incident.countDocuments({ ...scopeFilter(req), status: { $in: ['Reported', 'In-Progress'] } }),
+            closed: await Incident.countDocuments({ ...scopeFilter(req), status: { $in: ['Resolved', 'Closed'] } })
         };
 
         // Trends for charts (Always 7 days for attendance, 6 months for payroll)
@@ -265,10 +268,9 @@ exports.getAnalytics = async (req, res, next) => {
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-        let query = {};
-        if (req.user && req.user.role !== 'superadmin' && req.user.organizationId) {
-            query.organizationId = req.user.organizationId;
-        }
+        // Same fail-closed reasoning as above: a tenant user missing an
+        // organizationId previously fell through to an unfiltered query.
+        let query = { ...scopeFilter(req) };
 
         // 1. KPIs
         const totalEmployees = await User.countDocuments(query);

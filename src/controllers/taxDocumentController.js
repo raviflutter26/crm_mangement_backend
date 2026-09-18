@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const TaxDocument = require('../models/TaxDocument');
+const { scopeFilter } = require('../utils/tenancy');
 
 const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -8,10 +9,11 @@ const formatSize = (bytes) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const scopeFilter = (req) => {
-    const role = (req.user.role || '').toLowerCase();
-    return role === 'superadmin' ? {} : { organizationId: req.user.organizationId };
-};
+// Scoping comes from src/utils/tenancy.js. The local copy this replaces read
+// `role === 'superadmin' ? {} : { organizationId: req.user.organizationId }`,
+// which fails OPEN for a tenant user with no organization: Mongoose drops an
+// undefined value, leaving a match-all filter across every tenant. scopeFilter
+// returns a filter that provably matches nothing instead.
 
 // Upload a real file and create the TaxDocument record for it.
 exports.upload = async (req, res) => {

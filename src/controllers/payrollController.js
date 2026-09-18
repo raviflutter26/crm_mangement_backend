@@ -1,4 +1,10 @@
+// Tenant scoping comes from src/utils/tenancy.js rather than a bare
+// { organizationId: req.user.organizationId }. That pattern fails OPEN when the
+// value is undefined — Mongoose drops undefined keys, leaving a match-all filter
+// across every tenant. scopeFilter returns a provably-empty filter instead, and
+// withOrg strips any client-supplied tenant key before stamping the trusted one.
 const Payroll = require('../models/Payroll');
+const { scopeFilter, withOrg } = require('../utils/tenancy');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
@@ -16,7 +22,7 @@ exports.getPayroll = async (req, res, next) => {
 
         const orgId = req.user?.organizationId;
         const role = (req.user?.role || '').toLowerCase();
-        const query = { organizationId: orgId };
+        const query = { ...scopeFilter(req) };
         // Employees can only ever see their own payroll records — never trust a client-supplied employee id for this role.
         if (role === 'employee') {
             query.employee = req.user._id;
@@ -53,7 +59,7 @@ exports.getPayrollById = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
         const role = (req.user?.role || '').toLowerCase();
-        const record = await Payroll.findOne({ _id: req.params.id, organizationId: orgId })
+        const record = await Payroll.findOne({ _id: req.params.id, ...scopeFilter(req) })
             .populate('employee', 'firstName lastName employeeId department designation bankDetails');
         if (!record) return res.status(404).json({ success: false, message: 'Payroll record not found for your organization.' });
         if (role === 'employee' && String(record.employee?._id || record.employee) !== String(req.user._id)) {
@@ -72,7 +78,7 @@ exports.getPayrollById = async (req, res, next) => {
 exports.createPayroll = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const record = await Payroll.create({ ...req.body, organizationId: orgId });
+        const record = await Payroll.create(withOrg(req, req.body));
         res.status(201).json({ success: true, data: record });
     } catch (error) {
         next(error);
@@ -87,7 +93,7 @@ exports.updatePayroll = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
         const record = await Payroll.findOneAndUpdate(
-            { _id: req.params.id, organizationId: orgId },
+            { _id: req.params.id, ...scopeFilter(req) },
             req.body,
             {
                 new: true,
@@ -113,7 +119,7 @@ exports.getPayrollSummary = async (req, res, next) => {
 
         const orgId = req.user?.organizationId;
         const summary = await Payroll.aggregate([
-            { $match: { month: parseInt(currentMonth), year: parseInt(currentYear), organizationId: orgId } },
+            { $match: { month: parseInt(currentMonth), year: parseInt(currentYear), ...scopeFilter(req) } },
             {
                 $group: {
                     _id: null,
@@ -167,6 +173,24 @@ exports.syncFromZoho = async (req, res, next) => {
 exports.getPayslip = async (req, res, next) => {
     try {
         const { employeeId, payRunId } = req.params;
+
+        // The id in the URL used to be passed straight to Zoho with no check at
+        // all, so any authenticated user could read any employee's payslip by
+        // guessing an id — including one in another tenant, since the lookup
+        // never touched our own database. An employee may read only their own;
+        // everyone else is confined to their own organization.
+        const role = (req.user?.role || '').toLowerCase();
+        if (role === 'employee' && String(employeeId) !== String(req.user._id)) {
+            return res.status(403).json({ success: false, message: 'You may only view your own payslip.' });
+        }
+
+        if (role !== 'superadmin') {
+            const subject = await User.findOne({ _id: employeeId, ...scopeFilter(req) }).select('_id');
+            if (!subject) {
+                return res.status(404).json({ success: false, message: 'Employee not found in your organization.' });
+            }
+        }
+
         const payslip = await zohoPayrollService.getPayslip(employeeId, payRunId);
 
         await logAction(req.user?._id, 'view_payslip', 'Payroll', {
@@ -191,7 +215,7 @@ exports.getAttendanceSummary = async (req, res, next) => {
         const month = parseInt(req.query.month) || new Date().getMonth() + 1;
         const year = parseInt(req.query.year) || new Date().getFullYear();
 
-        const employees = await User.find({ organizationId: orgId, status: 'Active' });
+        const employees = await User.find({ ...scopeFilter(req), status: 'Active' });
 
         const daysInMonth = new Date(year, month, 0).getDate();
         let workingDays = 0;
@@ -245,7 +269,7 @@ exports.getAttendanceSummary = async (req, res, next) => {
 exports.getPayrollAuditLogs = async (req, res, next) => {
     try {
         const orgId = req.user?.organizationId;
-        const orgUsers = await User.find({ organizationId: orgId }).select('_id');
+        const orgUsers = await User.find(scopeFilter(req)).select('_id');
         const userIds = orgUsers.map(u => u._id);
 
         const logs = await AuditLog.find({ module: 'Payroll', userId: { $in: userIds } })

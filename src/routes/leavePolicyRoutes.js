@@ -8,7 +8,7 @@ router.use(authenticate, denySuperAdmin);
 /**
  * @desc    Get all leave policies for organization
  */
-router.get('/', async (req, res) => {
+router.get('/', authorize('owner', 'admin', 'hr'), async (req, res) => {
     try {
         const orgId = req.orgId || req.user.organizationId;
         const policies = await LeavePolicy.find({ organizationId: orgId, isDeleted: false });

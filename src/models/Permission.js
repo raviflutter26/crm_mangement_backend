@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const permissionSchema = new mongoose.Schema(
     {
         employee: {
@@ -56,5 +57,10 @@ const permissionSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+permissionSchema.plugin(branchScope);
 
 module.exports = mongoose.model('Permission', permissionSchema);

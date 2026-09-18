@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const siteAllowanceSchema = new mongoose.Schema({
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, enum: ['Site Daily Allowance', 'Night Shift Allowance', 'Hazard Pay', 'Remote Area Allowance', 'Other'], default: 'Site Daily Allowance' },
@@ -18,5 +19,10 @@ const siteAllowanceSchema = new mongoose.Schema({
 siteAllowanceSchema.pre('save', function () {
     this.totalAmount = this.days * this.rate;
 });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+siteAllowanceSchema.plugin(branchScope);
 
 module.exports = mongoose.model('SiteAllowance', siteAllowanceSchema);

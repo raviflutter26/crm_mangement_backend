@@ -1,9 +1,11 @@
 const Training = require('../models/Training');
+const { scopeFilter } = require('../utils/tenancy');
 
-const scopeFilter = (req) => {
-    const role = (req.user.role || '').toLowerCase();
-    return role === 'superadmin' ? {} : { organizationId: req.user.organizationId };
-};
+// Scoping comes from src/utils/tenancy.js. The local copy this replaces read
+// `role === 'superadmin' ? {} : { organizationId: req.user.organizationId }`,
+// which fails OPEN for a tenant user with no organization: Mongoose drops an
+// undefined value, leaving a match-all filter across every tenant. scopeFilter
+// returns a filter that provably matches nothing instead.
 
 // Employee self-enrolls in a training program.
 exports.enroll = async (req, res) => {

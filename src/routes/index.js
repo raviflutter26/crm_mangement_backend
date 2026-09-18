@@ -9,6 +9,7 @@ const leaveRoutes = require('./leaveRoutes');
 const payrollRoutes = require('./payrollRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const departmentRoutes = require('./departmentRoutes');
+const branchRoutes = require('./branchRoutes');
 const organizationRoutes = require('./organizationRoutes');
 const recruitmentRoutes = require('./recruitmentRoutes');
 const performanceRoutes = require('./performanceRoutes');
@@ -71,6 +72,7 @@ router.use('/payouts', payoutRoutes);
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/departments', departmentRoutes);
+router.use('/branches', branchRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/organizations', organizationRoutes); // Alias for plural support
 router.use('/recruitment', recruitmentRoutes);

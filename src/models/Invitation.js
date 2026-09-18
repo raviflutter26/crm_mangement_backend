@@ -4,6 +4,9 @@ const InvitationSchema = new mongoose.Schema({
     email: { type: String, required: true, lowercase: true, trim: true },
     role: { type: String, required: true },
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+    // Branches the invited user will be scoped to. Empty means every branch in
+    // the organization, matching User.branchIds.
+    branchIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }], default: [] },
     departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
     token: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true },

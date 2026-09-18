@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const branchScope = require('./plugins/branchScope');
 const { encrypt, decrypt, maskAccountNumber } = require('../utils/encryption');
 
 const bankDetailSchema = new mongoose.Schema({
@@ -55,5 +56,10 @@ bankDetailSchema.pre('save', function () {});
 bankDetailSchema.virtual('accountNumber').get(function() {
     return decrypt(this.encryptedAccountNumber);
 });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+bankDetailSchema.plugin(branchScope, { employeePath: 'employeeId' });
 
 module.exports = mongoose.model('BankDetail', bankDetailSchema);

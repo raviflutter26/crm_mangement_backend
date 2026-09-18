@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const EmployeeDocument = require('../models/EmployeeDocument');
+const { scopeFilter } = require('../utils/tenancy');
 
 const typeFromMime = (mimetype) => {
     if (mimetype === 'application/pdf') return 'PDF';
@@ -43,9 +44,7 @@ exports.upload = async (req, res) => {
 // Delete the record and its backing file together.
 exports.remove = async (req, res) => {
     try {
-        const role = (req.user.role || '').toLowerCase();
-        const scopeFilter = role === 'superadmin' ? {} : { organizationId: req.user.organizationId };
-        const doc = await EmployeeDocument.findOneAndDelete({ _id: req.params.id, ...scopeFilter });
+        const doc = await EmployeeDocument.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
         if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
 
         if (doc.fileUrl && doc.fileUrl.startsWith('/uploads/')) {

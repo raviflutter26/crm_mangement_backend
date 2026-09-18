@@ -40,20 +40,75 @@ const userSchema = new mongoose.Schema(
             required: false,
             select: false,
         },
+        // Roles are stored lowercase. The enum previously carried both casings
+        // ('hr' and 'HR'), which meant every comparison had to remember to
+        // normalize first; the setter below makes that impossible to forget.
+        // 'owner' is the tenant-level role: the customer's own top administrator,
+        // above branch admins and below the platform superadmin.
         role: {
             type: String,
-            enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'Admin', 'HR', 'Manager', 'Employee'],
+            enum: ['superadmin', 'owner', 'admin', 'hr', 'manager', 'employee'],
             default: 'employee',
+            set: (v) => (v == null ? v : String(v).toLowerCase()),
         },
         organizationId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Organization',
             default: null
         },
+        // The branch this person is posted to — where they actually work. This
+        // is what stamps their attendance, leave and payroll rows, and what
+        // decides which state's PT slabs apply to them.
+        //
+        // Distinct from branchIds below: this is WHERE THEY ARE, that is WHAT
+        // THEY CAN SEE. For an employee the two coincide, but an admin posted
+        // at Chennai may administer Chennai and Bangalore both.
+        branchId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Branch',
+            default: null,
+        },
+        // Branches this user may act in. Empty means every branch in their
+        // organization, which is the correct reading for an owner, for a
+        // group-wide HR, and for every user created before branches existed.
+        // See src/utils/tenancy.js for how this narrows reads.
+        branchIds: {
+            type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }],
+            default: [],
+        },
+        // Makes "every branch" a deliberate grant rather than a blank field.
+        //
+        // An empty branchIds reads as "every branch in my organization" (see
+        // branchIdsFor), which is correct for an owner and for a genuine
+        // group-wide HR — and silently wrong for a branch admin or branch HR
+        // who was simply created before anyone assigned their branches. Those
+        // two roles now need either a branch or this flag; without one,
+        // branch-narrowed reads resolve to no rows instead of to the whole
+        // organization. See scopeFilter in src/utils/tenancy.js.
+        //
+        // Deliberately NOT enforced by a schema validator: an organization's
+        // very first admin is created during signup, before any branch exists
+        // (see organizationController), and every pre-branch row would fail to
+        // save. The migration marks existing branch roles explicitly instead.
+        isGroupWide: {
+            type: Boolean,
+            default: false,
+        },
+        // The department a manager is scoped to. Managers still approve only
+        // their direct reports (see reportingManager); this widens what they can
+        // *see* to their whole department.
+        departmentId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Department',
+            default: null,
+        },
         zohoEmployeeId: {
             type: String,
             default: null,
         },
+        // Legacy free-text department name, predating the Department collection.
+        // Kept because reports and Zoho sync still read it; `departmentId` above
+        // is the authoritative link. Backfilled by src/scripts/migrateToBranchScope.js.
         department: {
             type: String,
             default: null,
@@ -330,6 +385,9 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ department: 1 });
 userSchema.index({ status: 1 });
+userSchema.index({ organizationId: 1, branchId: 1 });
+userSchema.index({ organizationId: 1, branchIds: 1 });
+userSchema.index({ organizationId: 1, departmentId: 1 });
 
 userSchema.virtual('name').get(function () {
     return `${this.firstName} ${this.lastName}`;
@@ -354,6 +412,24 @@ userSchema.virtual('bankDetails.accountNumber')
             this.bankDetails.encryptedAccountNumber = encrypt(value);
         }
     });
+
+// A restricted user cannot be posted to a branch they may not act in. An empty
+// branchIds is unrestricted, so it satisfies this trivially — which is why every
+// pre-branch user and every owner passes.
+userSchema.path('branchId').validate(function (value) {
+    if (!value) return true;
+    const allowed = (this.branchIds || []).filter(Boolean).map(String);
+    return allowed.length === 0 || allowed.includes(String(value));
+}, 'Posting branch must be one of the branches this user may act in.');
+
+// Normalize casing on documents written before the enum was lowercased, so an
+// untouched legacy row can still be saved. Setters do not run on hydration,
+// which is why this cannot be left to the `set` on `role`.
+userSchema.post('init', function () {
+    if (this.role && this.role !== String(this.role).toLowerCase()) {
+        this.role = String(this.role).toLowerCase();
+    }
+});
 
 userSchema.pre('save', async function () {
     if (!this.password || !this.isModified('password')) return;

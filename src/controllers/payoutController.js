@@ -6,13 +6,18 @@ const User = require('../models/User');
 const BankDetail = require('../models/BankDetail');
 const { sendEmail } = require('../services/emailService');
 const { logAction } = require('../utils/auditLogger');
+const { scopeFilter } = require('../utils/tenancy');
 
 /**
  * Payout transactions have no organizationId of their own — scope them via
  * the Payroll records that belong to the requester's organization.
  */
-async function orgScopedPayrollIds(orgId) {
-    const payrolls = await Payroll.find({ organizationId: orgId }).select('_id');
+async function orgScopedPayrollIds(req) {
+    // Takes the request, not a bare orgId: an undefined orgId here used to
+    // produce Payroll.find({ organizationId: undefined }), which Mongoose
+    // reduces to a match-all — every tenant's payroll, and from there every
+    // tenant's payout transactions. scopeFilter fails closed instead.
+    const payrolls = await Payroll.find(scopeFilter(req)).select('_id');
     return payrolls.map(p => p._id);
 }
 
@@ -128,7 +133,7 @@ class PayoutController {
     static async getStatus(req, res) {
         try {
             const orgId = req.user?.organizationId;
-            const payrollIds = await orgScopedPayrollIds(orgId);
+            const payrollIds = await orgScopedPayrollIds(req);
             const transactions = await PayoutTransaction.find({ payrollId: { $in: payrollIds } });
 
             const summary = {
@@ -152,7 +157,7 @@ class PayoutController {
     static async getHistory(req, res) {
         try {
             const orgId = req.user?.organizationId;
-            const payrollIds = await orgScopedPayrollIds(orgId);
+            const payrollIds = await orgScopedPayrollIds(req);
             const transactions = await PayoutTransaction.find({ payrollId: { $in: payrollIds } })
                 .populate('employeeId', 'firstName lastName employeeId')
                 .sort('-createdAt');
@@ -229,7 +234,7 @@ class PayoutController {
     static async retryPayout(req, res) {
         try {
             const orgId = req.user?.organizationId;
-            const payrollIds = await orgScopedPayrollIds(orgId);
+            const payrollIds = await orgScopedPayrollIds(req);
             const transaction = await PayoutTransaction.findOne({ _id: req.params.id, payrollId: { $in: payrollIds } });
             if (!transaction) return res.status(404).json({ success: false, message: 'Payout transaction not found' });
             if (transaction.status !== 'failed') {

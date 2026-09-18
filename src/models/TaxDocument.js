@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const taxDocumentSchema = new mongoose.Schema({
     employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     documentType: { type: String, enum: ['Form 16', 'Form 12BB', 'TDS Certificate', 'Investment Declaration', 'Other'], required: true },
@@ -12,5 +13,10 @@ const taxDocumentSchema = new mongoose.Schema({
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
 }, { timestamps: true });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+taxDocumentSchema.plugin(branchScope);
 
 module.exports = mongoose.model('TaxDocument', taxDocumentSchema);

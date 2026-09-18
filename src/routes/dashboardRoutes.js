@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, selfService } = require('../middleware/auth');
 
-router.get('/', authenticate, dashboardController.getDashboard);
-router.get('/analytics', authenticate, dashboardController.getAnalytics);
+router.get('/', selfService('tenant-scoped dashboard; each role sees its own slice'), authenticate, dashboardController.getDashboard);
+router.get('/analytics', selfService('tenant-scoped dashboard; each role sees its own slice'), authenticate, dashboardController.getAnalytics);
 
 module.exports = router;

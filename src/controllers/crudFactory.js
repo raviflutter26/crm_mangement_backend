@@ -2,17 +2,14 @@
  * Generic CRUD Controller Factory
  * Creates standard getAll, getById, create, update, delete handlers for any Mongoose model.
  */
-const createCrudController = (Model, modelName, populateFields = '') => {
-    // Non-superadmin requests are always scoped to the caller's own organization;
-    // the organizationId is derived server-side from req.user, never trusted from the client.
-    const scopeFilter = (req) => {
-        const role = (req.user?.role || '').toLowerCase();
-        if (role === 'superadmin') {
-            return req.query.organizationId ? { organizationId: req.query.organizationId } : {};
-        }
-        return { organizationId: req.user?.organizationId };
-    };
+const { scopeFilter, withOrg } = require('../utils/tenancy');
 
+const createCrudController = (Model, modelName, populateFields = '') => {
+    // Scoping comes from src/utils/tenancy.js rather than a local copy. The copy
+    // that used to live here returned { organizationId: undefined } for a user
+    // with no organization, and an undefined value is dropped by the driver —
+    // which turned the filter into a match-all across every tenant. The shared
+    // helper fails closed instead.
     return {
         getAll: async (req, res) => {
             try {
@@ -52,13 +49,9 @@ const createCrudController = (Model, modelName, populateFields = '') => {
 
         create: async (req, res) => {
             try {
-                const payload = { ...req.body };
-                // Organization always comes from the authenticated user, never the client payload.
-                if (req.user && req.user.organizationId) {
-                    payload.organizationId = req.user.organizationId;
-                }
-
-                const item = await Model.create(payload);
+                // Organization always comes from the authenticated user, never the
+                // client payload; withOrg strips any supplied key before stamping.
+                const item = await Model.create(withOrg(req, req.body));
                 res.status(201).json({ success: true, data: item, message: `${modelName} created successfully` });
             } catch (err) {
                 console.error(`${modelName} create error:`, err);
@@ -90,8 +83,9 @@ const createCrudController = (Model, modelName, populateFields = '') => {
         // Employee-scoped: get records for the logged-in user's employee profile
         getMyRecords: async (req, res) => {
             try {
-                const filter = {};
-                if (req.query.organizationId) filter.organizationId = req.query.organizationId;
+                // Self-scoped, and still tenant-scoped underneath: the caller's own
+                // organization, never the organizationId they sent up.
+                const filter = { ...scopeFilter(req) };
                 // Match by employee field or reportedBy field
                 if (req.user && req.user._id) {
                     filter.$or = [

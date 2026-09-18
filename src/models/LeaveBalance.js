@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+const branchScope = require('./plugins/branchScope');
 const leaveBalanceSchema = new mongoose.Schema({
     employeeId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -50,5 +51,10 @@ leaveBalanceSchema.virtual('remaining').get(function() {
 });
 
 leaveBalanceSchema.index({ employeeId: 1, leaveType: 1, year: 1 }, { unique: true });
+
+
+// Branch is resolved from the employee the row belongs to, not from whoever
+// saved it, and snapshotted so a transfer never rewrites history.
+leaveBalanceSchema.plugin(branchScope, { employeePath: 'employeeId' });
 
 module.exports = mongoose.model('LeaveBalance', leaveBalanceSchema);
