@@ -22,9 +22,27 @@ const isProduction = env === 'production';
  */
 const requireSecret = (name, value) => {
   if (value) return value;
+
+  // Say what IS present, not just what is missing. A deploy that dies on a
+  // missing variable gives no way to tell "never set" from "set under a
+  // slightly different name" — which is the usual cause, and the one the plain
+  // message sent people hunting for the wrong thing. Names only: printing a
+  // value here would put the secret straight into the host's build log.
+  const seen = Object.keys(process.env)
+    .filter(k => /^(MONGO|JWT|ENCRYPTION|EMAIL|ZOHO|RAZORPAY|REDIS|WEBSITE|NODE_ENV|PORT)/i.test(k))
+    .sort();
+
+  const nearMiss = Object.keys(process.env)
+    .filter(k => k !== name && k.trim().toUpperCase().replace(/[-\s]/g, '_') === name);
+
   throw new Error(
     `Missing required environment variable ${name}. ` +
-    `Set it in .env (local) or in the host's environment (production) before starting the server.`
+    `Set it in .env (local) or in the host's environment (production) before starting the server.\n` +
+    (nearMiss.length
+      ? `  Did you mean one of these? ${nearMiss.map(k => JSON.stringify(k)).join(', ')} ` +
+        `— the lookup is case- and whitespace-sensitive, so rename it to exactly ${name}.\n`
+      : '') +
+    `  Config-related variables this process can see: ${seen.length ? seen.join(', ') : '(none)'}`
   );
 };
 
@@ -41,7 +59,11 @@ const config = {
 
   // JWT
   jwt: {
-    secret: requireSecret('JWT_SECRET', process.env.JWT_SECRET),
+    // getEnv, not process.env directly: MONGODB_URI on line 31 already
+    // tolerates a case mismatch, and having the two secrets disagree meant a
+    // host set to `jwt_secret` booted far enough to resolve Mongo and then
+    // died here — which reads as though only the JWT was missing.
+    secret: requireSecret('JWT_SECRET', getEnv('JWT_SECRET')),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
 

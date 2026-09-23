@@ -77,3 +77,16 @@ instead; the harness still refuses any database whose name lacks "test".
 import time. `stopDb()` closes both — without that the runner never exits,
 and `--test-force-exit` is not a fix (it truncates the TAP output and reports
 a different test count on each run).
+
+## Why `--test-concurrency=4`
+
+Each test file starts its own `mongod` via `mongodb-memory-server`. Node's
+default concurrency is the CPU count, so on an 8-core machine all 18 suites
+raced to stand up 8 databases at once — and suites began failing on resource
+contention rather than on anything they assert. The failures moved around
+between runs and vanished when a suite was run on its own, which is the
+signature to watch for.
+
+Capping concurrency keeps the run deterministic. If you still see a suite pass
+alone but fail in the full run, drop to `--test-concurrency=2` (verified green)
+before looking for a logic bug.
