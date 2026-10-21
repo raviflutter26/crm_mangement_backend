@@ -108,6 +108,11 @@ const getCompiledTemplate = async (templateName, data) => {
  */
 const sendEmail = async ({ to, subject, template, data, attachments = [] }) => {
     try {
+        // Fail at once rather than after ENQUEUE_TIMEOUT_MS: callers already
+        // handle a failed enqueue, and there is nothing to wait for.
+        if (!config.redis.enabled) {
+            throw new Error(`Email queue is disabled (no REDIS_URL); not sending email to ${to}`);
+        }
         const add = getQueue().add(`email-${template}-${Date.now()}`, {
             to,
             subject,
@@ -177,6 +182,8 @@ const buildWorker = () => new Worker('emailQueue', async (job) => {
  */
 const startEmailWorker = () => {
     if (emailWorker) return emailWorker;
+    // config already warned at boot; starting anyway would only retry forever.
+    if (!config.redis.enabled) return null;
     emailWorker = buildWorker();
 
     emailWorker.on('completed', (job) => {

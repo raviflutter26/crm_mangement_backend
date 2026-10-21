@@ -136,6 +136,10 @@ const config = {
 
   // Redis
   redis: {
+    // Locally a Redis on 127.0.0.1 is a fair assumption; on a host it never
+    // is, and connecting to it anyway means a retry loop that floods the logs
+    // for the life of the process. Production must point at Redis explicitly.
+    enabled: !isProduction || Boolean(process.env.REDIS_URL || process.env.REDIS_HOST),
     url: process.env.REDIS_URL,
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: process.env.REDIS_PORT || 6379,
@@ -148,6 +152,7 @@ const optionalWarnings = [
   ['ENCRYPTION_KEY', process.env.ENCRYPTION_KEY, 'bank account numbers cannot be encrypted or decrypted'],
   ['EMAIL_HOST', process.env.EMAIL_HOST, 'outbound email (payslips, approvals) will not send'],
   ['WEBSITE_URL', process.env.WEBSITE_URL, 'email action links will be broken'],
+  ['REDIS_URL', config.redis.enabled, 'the email queue is disabled, so no email will be sent'],
 ];
 
 if (isProduction) {
