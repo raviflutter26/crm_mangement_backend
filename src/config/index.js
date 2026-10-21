@@ -3,9 +3,24 @@ const fs = require('fs');
 const path = require('path');
 
 const envPath = path.join(__dirname, '../../.env');
-if (fs.existsSync(envPath)) {
+// Remembered so a failed boot can say whether the file was there at all. A host
+// that mounts secrets as a file rather than as variables fails in exactly the
+// same way as one that was never configured, and the two need different fixes.
+const envFileLoaded = fs.existsSync(envPath);
+if (envFileLoaded) {
   dotenv.config({ path: envPath });
 }
+
+// Hosts that mount secrets as files tend to use this path. Listing the names
+// turns "the dashboard says it is set" into something checkable from inside the
+// container, which is the only place that counts.
+const readSecretsDir = () => {
+  try {
+    return fs.readdirSync('/etc/secrets').sort();
+  } catch {
+    return null;
+  }
+};
 
 // Helper to get environment variables with fallback and case-insensitivity
 const getEnv = (key, defaultValue) => {
@@ -32,6 +47,8 @@ const requireSecret = (name, value) => {
     .filter(k => /^(MONGO|JWT|ENCRYPTION|EMAIL|ZOHO|RAZORPAY|REDIS|WEBSITE|NODE_ENV|PORT)/i.test(k))
     .sort();
 
+  const secretFiles = readSecretsDir();
+
   const nearMiss = Object.keys(process.env)
     .filter(k => k !== name && k.trim().toUpperCase().replace(/[-\s]/g, '_') === name);
 
@@ -42,7 +59,14 @@ const requireSecret = (name, value) => {
       ? `  Did you mean one of these? ${nearMiss.map(k => JSON.stringify(k)).join(', ')} ` +
         `— the lookup is case- and whitespace-sensitive, so rename it to exactly ${name}.\n`
       : '') +
-    `  Config-related variables this process can see: ${seen.length ? seen.join(', ') : '(none)'}`
+    `  Config-related variables this process can see: ${seen.length ? seen.join(', ') : '(none)'}\n` +
+    // The filtered list above answers the common case. These three answer the
+    // case where the host swears the variable is set and the process disagrees:
+    // they distinguish a wrong service, a secret mounted as a file, and a name
+    // that does not match any pattern the filter knows about.
+    `  .env file at ${envPath}: ${envFileLoaded ? 'found and loaded' : 'not found'}\n` +
+    `  /etc/secrets: ${secretFiles === null ? 'not present' : (secretFiles.length ? secretFiles.join(', ') : '(empty)')}\n` +
+    `  Every variable name this process can see (values omitted): ${Object.keys(process.env).sort().join(', ')}`
   );
 };
 
