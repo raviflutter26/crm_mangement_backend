@@ -6,13 +6,35 @@ const SALT_LENGTH = 16;
 const TAG_LENGTH = 16;
 
 /**
+ * Resolve the key at call time rather than at import, so scripts and tests that
+ * never touch encrypted fields keep working without it — config/index.js already
+ * warns at boot when it is unset in production.
+ *
+ * There used to be a hardcoded fallback key here. A fallback that ships in the
+ * repository is not a key: anyone who can read the source could decrypt every
+ * bank account number and forge MFA secrets, and a deploy that simply forgot the
+ * variable would silently downgrade to it rather than say so. Refuse instead.
+ */
+const getKey = () => {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key) {
+        throw new Error(
+            'ENCRYPTION_KEY is not set. Bank account numbers and MFA secrets cannot be ' +
+            'encrypted or decrypted without it. Set it in .env (local) or in the host\'s ' +
+            'environment (production).'
+        );
+    }
+    return key;
+};
+
+/**
  * Encrypts a string using AES-256-GCM
  * @param {string} text The plain text to encrypt
  * @returns {string} Encrypted string in format: salt:iv:authTag:encryptedText
  */
 const encrypt = (text) => {
+    const secretKey = getKey();
     try {
-        const secretKey = process.env.ENCRYPTION_KEY || 'v6yB8pL9xR4mQ2nZ5jH3kF1aD7sW0eT9'; // Should be 32 chars
         const salt = crypto.randomBytes(SALT_LENGTH);
         const iv = crypto.randomBytes(IV_LENGTH);
 
@@ -38,10 +60,10 @@ const encrypt = (text) => {
  * @returns {string} Decrypted plain text
  */
 const decrypt = (encryptedBundle) => {
+    const secretKey = getKey();
     try {
         const [saltHex, ivHex, authTagHex, encryptedText] = encryptedBundle.split(':');
-        
-        const secretKey = process.env.ENCRYPTION_KEY || 'v6yB8pL9xR4mQ2nZ5jH3kF1aD7sW0eT9';
+
         const salt = Buffer.from(saltHex, 'hex');
         const iv = Buffer.from(ivHex, 'hex');
         const authTag = Buffer.from(authTagHex, 'hex');
